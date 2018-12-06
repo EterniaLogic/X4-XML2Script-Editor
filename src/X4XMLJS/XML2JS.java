@@ -21,7 +21,6 @@ import org.w3c.dom.Node;
 
 public class XML2JS {
 	public String floc;
-	private String js;
 	public boolean saved=false;
 	public String saveloc="";
 	
@@ -31,14 +30,6 @@ public class XML2JS {
 	
 	public XML2JS() {
 		floc = ""; // no reference XML file
-	}
-
-	public boolean saveXML(String saveloc, String js) {
-		this.js = js;
-		
-		
-		
-		return false;
 	}
 	
 	public String getJS() {
@@ -54,7 +45,7 @@ public class XML2JS {
 			Document doc = dBuilder.parse(new File(floc));
 			
 			doc.getDocumentElement().normalize();
-			System.out.println("Root element :" + doc.getDocumentElement().getNodeName()+"\n\n");
+			//System.out.println("Root element :" + doc.getDocumentElement().getNodeName()+"\n\n");
 			
 			org.w3c.dom.Element root = doc.getDocumentElement();
 			
@@ -80,7 +71,7 @@ public class XML2JS {
 			
 		}
 		
-		System.out.println(text);
+		//System.out.println(text);
 		return text;
 	}
 	
@@ -161,9 +152,9 @@ public class XML2JS {
 					}
 				}
 				
-				// trim text
-				paramnames=paramnames.substring(0, paramnames.length()-2);
-				paramvals=paramvals.substring(0, paramvals.length()-2);
+				// trim text, the lazy way
+				if(paramnames.length() > 2)	paramnames=paramnames.substring(0, paramnames.length()-2);
+				if(paramnames.length() > 2) paramvals=paramvals.substring(0, paramvals.length()-2);
 				
 				if(child2.hasChildNodes()) {
 					text += getTabs(tabulation)+"param "+type+name+"("+paramvals+"){ // "+paramnames+"\n";

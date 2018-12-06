@@ -18,7 +18,9 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 
 import java.awt.event.KeyEvent;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.charset.Charset;
@@ -80,11 +82,6 @@ public class EditorGui {
 		tabbedPane = new JTabbedPane(JTabbedPane.TOP);
 		frame.getContentPane().add(tabbedPane, BorderLayout.CENTER);
 		
-		
-		
-		
-		
-		
 		JMenuBar menuBar = new JMenuBar();
 		frame.setJMenuBar(menuBar);
 		
@@ -98,8 +95,8 @@ public class EditorGui {
 		JMenuItem mntmOpen = new JMenuItem("Open");
 		mntmOpen.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				fc.addChoosableFileFilter(new FileNameExtensionFilter("XML", "xml"));
-				fc.addChoosableFileFilter(new FileNameExtensionFilter("XML Script", "xml.script"));
+				fc.addChoosableFileFilter(new FileNameExtensionFilter("XML / Script", "xml", "script"));
+//				fc.addChoosableFileFilter(new FileNameExtensionFilter("XML Script", "xml.script"));
 				fc.setFileSelectionMode(JFileChooser.FILES_ONLY);
 				fc.setAcceptAllFileFilterUsed(false);
 				int returnval = fc.showOpenDialog(fc);
@@ -109,28 +106,29 @@ public class EditorGui {
 		            System.out.println("Opening: " + file.getPath());
 		            
 		            try {
+		            	// read .xml.script
 		            	if(file.getPath().endsWith(".script")) {
-		            		JJsXmlSplitPane splitPane = new JJsXmlSplitPane(file);
+		            		JJsXmlSplitPane splitPane = new JJsXmlSplitPane();
 				            splitPane.setDividerLocation(550);
 				            splitPane.setResizeWeight(1);
 				            
 				            splitPane.xml2js = new XML2JS();
 				            splitPane.xml2js.saved=true;
-				            splitPane.xml2js.saveloc=file.getPath();
-				            
 				            
 				            byte[] encoded = Files.readAllBytes(file.toPath());
 				            splitPane.JS.setText(new String(encoded, Charset.defaultCharset()));
 				            
+				            // .xml file exists?
 				            File f = new File(file.getPath().replaceAll(".xml.script", ".xml"));
 				            if(f.exists()) {
-				            	splitPane.xml2js.floc=f.getPath();
-				            	tabbedPane.addTab(file.getName(), null, splitPane, null);
+				            	splitPane.xml2js.saveloc=f.getPath();
+				            	tabbedPane.addTab(f.getName(), null, splitPane, null);
 				            }else{
 				            	splitPane.xml2js.saved=false;
-				            	tabbedPane.addTab("*"+file.getName(), null, splitPane, null);
+				            	splitPane.xml2js.saveloc=f.getPath();
+				            	tabbedPane.addTab("*"+f.getName(), null, splitPane, null);
 				            }
-		            	}else {
+		            	}else { // read .xml
 			            	JJsXmlSplitPane splitPane = new JJsXmlSplitPane(file);
 				            splitPane.setDividerLocation(550);
 				            splitPane.setResizeWeight(1);
@@ -163,15 +161,34 @@ public class EditorGui {
 						if(returnval == JFileChooser.APPROVE_OPTION) {
 							File file = fc.getSelectedFile();
 							pane.xml2js.saveloc=file.getPath();
-							System.out.println("Saving: " + file.getPath()+".script");
-							System.out.println("Saving: " + file.getPath());
-							
+
 							// actually save the script first so that a user can come back to it
 							File f2 = new File(file.getPath()+".script");
 							try {
 								f2.createNewFile();
-								PrintWriter out = new PrintWriter(file.getPath()+".script");
-							    out.println(pane.JS.getText());
+							    BufferedWriter writer = new BufferedWriter(new FileWriter(f2));
+							    writer.write(pane.JS.getText());
+							    writer.close();
+								System.out.println("Saved: " + file.getPath()+".script");
+							    
+								
+								// convert to XML
+								try {
+									String xml=JS2XML.getXML(pane.JS.getText());
+									
+									// verify XML
+									if(!JS2XML.verifyXML(xml)) {
+										// Error out!
+									}else {
+										// save file
+										BufferedWriter writer2 = new BufferedWriter(new FileWriter(file));
+									    writer.write(xml);
+									    writer.close();
+										System.out.println("Saved: " + file.getPath()+".script");
+									}
+								}catch(Exception e) {
+									e.printStackTrace();
+								}
 							}catch(Exception e) {
 								e.printStackTrace();
 							}
@@ -202,8 +219,8 @@ public class EditorGui {
 }
 
 class JJsXmlSplitPane extends JSplitPane{
-	public RSyntaxTextArea XML = new RSyntaxTextArea(20,60);
-	public RSyntaxTextArea JS = new RSyntaxTextArea(20,60);
+	public RSyntaxTextArea XML;
+	public RSyntaxTextArea JS;
 	public XML2JS xml2js;
 	
 	public JJsXmlSplitPane(File file) throws IOException {
@@ -212,12 +229,12 @@ class JJsXmlSplitPane extends JSplitPane{
     	
 		JScrollPane scroller = new JScrollPane();
         JScrollPane scroller_xml = new JScrollPane();
-        RSyntaxTextArea XML = new RSyntaxTextArea(20, 60);
+        XML = new RSyntaxTextArea(20, 60);
         XML.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_XML);
         XML.setCodeFoldingEnabled(true);
         XML.setAntiAliasingEnabled(true);
         
-        RSyntaxTextArea JS = new RSyntaxTextArea(20, 60);
+        JS = new RSyntaxTextArea(20, 60);
         JS.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JAVASCRIPT);
         JS.setCodeFoldingEnabled(true);
         JS.setAntiAliasingEnabled(true);
@@ -238,12 +255,12 @@ class JJsXmlSplitPane extends JSplitPane{
 	public JJsXmlSplitPane() {
 		JScrollPane scroller = new JScrollPane();
         JScrollPane scroller_xml = new JScrollPane();
-        RSyntaxTextArea XML = new RSyntaxTextArea(20, 60);
+        XML = new RSyntaxTextArea(20, 60);
         XML.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_XML);
         XML.setCodeFoldingEnabled(true);
         XML.setAntiAliasingEnabled(true);
         
-        RSyntaxTextArea JS = new RSyntaxTextArea(20, 60);
+        JS = new RSyntaxTextArea(20, 60);
         JS.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JAVASCRIPT);
         JS.setCodeFoldingEnabled(true);
         JS.setAntiAliasingEnabled(true);
