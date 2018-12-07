@@ -51,7 +51,23 @@ public class EditorGui {
 	 * Launch the application.
 	 */
 	public static void main(String[] args) {
-		EventQueue.invokeLater(new Runnable() {
+		
+		XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/cat/aiscripts/order.move.recon.xml");
+		String js = x2js.getJS();
+		
+		// save
+		try {
+		String saveloc = System.getProperty("user.dir")+"/test.xml.script";
+		BufferedWriter writer = new BufferedWriter(new FileWriter(new File(saveloc)));
+	    writer.write(js);
+	    writer.close();
+		}catch(Exception e) {}
+		
+		JS2XML.getXML(js);
+		
+		
+		
+		/*EventQueue.invokeLater(new Runnable() {
 			public void run() {
 				try {
 					EditorGui window = new EditorGui();
@@ -60,7 +76,7 @@ public class EditorGui {
 					e.printStackTrace();
 				}
 			}
-		});
+		});*/
 	}
 
 	/**
@@ -99,6 +115,9 @@ public class EditorGui {
 //				fc.addChoosableFileFilter(new FileNameExtensionFilter("XML Script", "xml.script"));
 				fc.setFileSelectionMode(JFileChooser.FILES_ONLY);
 				fc.setAcceptAllFileFilterUsed(false);
+				
+				fc.setCurrentDirectory(new File(System.getProperty("user.dir")));
+				
 				int returnval = fc.showOpenDialog(fc);
 				
 				if(returnval == JFileChooser.APPROVE_OPTION) {
@@ -156,6 +175,8 @@ public class EditorGui {
 						// Save file dialog
 						fc.resetChoosableFileFilters();
 						fc.addChoosableFileFilter(new FileNameExtensionFilter("XML", "xml"));
+						if(!pane.xml2js.saveloc.equals(""))  // set default location to look in
+							fc.setCurrentDirectory(new File(pane.xml2js.saveloc));
 						int returnval = fc.showSaveDialog(fc);
 						
 						if(returnval == JFileChooser.APPROVE_OPTION) {
@@ -182,8 +203,8 @@ public class EditorGui {
 									}else {
 										// save file
 										BufferedWriter writer2 = new BufferedWriter(new FileWriter(file));
-									    writer.write(xml);
-									    writer.close();
+									    writer2.write(xml);
+									    writer2.close();
 										System.out.println("Saved: " + file.getPath()+".script");
 									}
 								}catch(Exception e) {
