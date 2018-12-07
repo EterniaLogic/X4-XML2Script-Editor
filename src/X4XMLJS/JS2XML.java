@@ -44,13 +44,14 @@ public class JS2XML {
 			e.printStackTrace();
 		}
 		
-		// Flatten input script to make it easier to read and convert
-		
+		// preprocess the script, combine lines and flatten.
 		js = preprocess(js);
 		
 		
 		// loop through and split up text by brackets into nodes
 		List<SubNode> nodes = toNodes(js,0);
+		
+		// report
 		if(nodes.size() == 0) {
 			// report syntax error and location/line.
 		}else {
@@ -77,12 +78,52 @@ public class JS2XML {
 	}
 	
 	private static String preprocess(String injs) {
-		injs = injs.replaceAll("    ", "");
 		injs = injs.replaceAll("\t", "");
-		injs = injs.replaceAll("&& ", "&&");
-		injs = injs.replaceAll("&&\n", "&& ");
+		
+		injs = preprocess_combineparams(injs);
 		
 		return injs;
+	}
+	
+	private static String preprocess_combineparams(String injs) {
+		// loop through each line and combine lines
+		// look for lines that are multiple parts of a single conditional or function. and put them together.
+					// i.e: if(a &&
+					//			b){
+		
+		String[] lines = injs.split("\n");
+		List<String> newlines = new LinkedList<String>();
+		
+		String currentline="";
+		int par=0;
+		for(String line : lines) {
+			// count parentheses, if the number of parentheses matches, then move on.
+			line=line.trim();
+			line=line.replace("&& ", "&&"); // matches up
+			line=line.replace("&&", "&& ");
+			
+			if(par > 0) {
+				currentline += line;
+			}else {
+				newlines.add(currentline);
+				//System.out.println(currentline);
+				currentline = line;
+			}
+			
+			for(char c : line.toCharArray()) {
+				if(c == '(') par++;
+				else if(c==')') par--;
+			}
+		}
+		
+		newlines.add(currentline);
+		
+		String newl = "";
+		for(String s : newlines)
+			if(!s.equals(""))
+				newl += s+"\n";
+		
+		return newl;
 	}
 	
 	// returns null if syntax error, secondary syntax detector will kick in
@@ -97,12 +138,14 @@ public class JS2XML {
 		LinkedList<String> mlcomment_text = new LinkedList<String>();
 		
 		String[] lines = innerjs.split("\n");
-		for(int i=0;i<lines.length;i++) {
-			
+		for(int l=0;l<lines.length;l++) {
 			
 			// split line up by parts.
-			String line = lines[i].trim();
+			String line = lines[l].trim();
 			String text = line, comment = "", params="";
+			
+			if(line.length() == 0) continue;
+			
 			System.out.println(XML2JS.toTab(bracket)+"process -- "+text);
 			try {
 				if(mlcomment) {
@@ -141,25 +184,17 @@ public class JS2XML {
 						// find the exit bracket, all lines in-between are considered inner script
 						LinkedList<String> innerlines = new LinkedList<String>();
 						int bcnt = 1; // count brackets
-						int a=i+1, b=i+1;
-						for(int j=i+1;j<lines.length;j++) {
+						//int a=l+1, b=l+1;
+						for(int j=l+1;j<lines.length;j++) {
 							String linex = lines[j];
 							String textx = linex.contains("//") ? linex.substring(0,linex.indexOf("//")) : linex; // strip comment temporarily
 							
-							
-							for(char c : textx.toCharArray()) {
-								if(bcnt <= 0) break;
-								if(c == '{') bcnt += 1;
-								else if(c == '}') bcnt -= 1;
-							}
-							
-							if(textx.contains("else")) {
-								//System.out.println("else :: "+textx);
-							}
+							bcnt = countbrackets(textx, '{', '}', bcnt);
+							//System.out.println("bcnt: "+bcnt+"  ---     "+textx);
 							
 							if(textx.contains("}") && bcnt <= 0) {
 								// ending, send innerjs to recursion
-								b=j;
+								//b=j;
 								String innerlinesx = "";
 								for(String s : innerlines) innerlinesx += s+"\n";
 								
@@ -175,9 +210,9 @@ public class JS2XML {
 								
 								// jump forward
 								if(textx.contains("else")) { // }else{ or }else if(){
-									i=j-1;
+									l=j-1;
 								}else
-									i=j;
+									l=j;
 								
 								break;
 							}else {
@@ -255,7 +290,8 @@ public class JS2XML {
 			node = setSubNode_param(text, valuelist);
 		}else if(text.startsWith("function ")) { // function name(value1, value2){ // {param1, param2}
 			node = setSubNode_function(text, valuelist);
-		}else if(text.startsWith("if(") || text.startsWith("while(")) { // if(value){
+		}else if(text.startsWith("if(") || text.startsWith("while(") || text.startsWith("do_any")
+				 || text.startsWith("any")) { // if(value){
 			node = setSubNode_IfWhile(text);
 		}else if(text.startsWith("else{")){ // if(value){
 			System.out.println("setSubNode else{");
@@ -427,8 +463,160 @@ public class JS2XML {
 	private static SubNode setSubNode_interrupt_if(String text, List<String> valuelist) {
 		System.out.println("setSubNode #interrupt if");
 		
-		return null;
+		// #interrupt_handler_if(check_any(event_object_attacked(group="$localtargetgroup") && event_object_signalled(check="false", object="this.sector", param="'police'")) && set_value(exact="if (event.name == 'event_object_attacked') then event.param else event.param2", name="$attacker") && $police && this.sector.exists && $attacker.isoperational && $attacker.zone.policefaction && not this.hasrelation.enemy.{$attacker.zone.policefaction} && $attacker.owner != this.owner && $attacker.owner != event.param3.owner){
+		
+		SubNode handler = new SubNode("interrupt_handler_if");
+		
+		// conditions
+		handler.children.add(handleConds(text));
+		
+		// actions
+		SubNode actn = new SubNode("actions");
+		
+		// listem
+		//
+		
+		//handler.children.add(actn);
+		
+		return handler;
 	}
+	
+	private static SubNode handleConds(String text) {
+		String conds = text.substring(22, text.lastIndexOf(")"));
+		System.out.println("CONDS: "+conds);
+		
+		SubNode conn = new SubNode("conditions");
+		
+		if(conds.contains("&")) {
+			conds = conds.replaceAll("&&", "&");
+			List<String> condl = new LinkedList<String>();
+			
+			int len = conds.length();
+			for(int i=0;i<len;i++) {
+				if(countbrackets(conds.substring(0,i), '(', ')', 0) <= 0) {
+					if(conds.charAt(i) == '&' || i==len-1) {	
+						String x = conds.substring(0,i+1).trim();
+						conds = conds.substring(i+1,len);
+						len = conds.length();
+						i=0;
+						
+						if(x.endsWith("&")) {
+							x = x.substring(0,x.length()-1).trim();
+						}
+						
+						System.out.println("COND: "+x);
+						if(x.contains("&") && x.contains("(")) { // still contains at least 3 elements?
+							String cname = x.substring(0,x.indexOf('('));
+							
+							SubNode condx = new SubNode(cname);
+							String act = x.substring(x.indexOf('(')+1, x.lastIndexOf(')'));
+							
+							for(String a : act.split("&")) {
+								SubNode n = condToNode(a);
+								if(n != null)
+									condx.children.add(n);
+							}
+							
+							conn.children.add(condx);
+						}else {
+							SubNode n = condToNode(x);
+							if(n != null)
+								conn.children.add(n);
+						}
+					}
+				}
+			}
+		}else {
+			SubNode n = condToNode(conds);
+			if(n != null)
+				conn.children.add(n);
+		}
+		
+		return conn;
+	}
+
+	private static SubNode condToNode(String text) {
+		System.out.println("CONDTONODE: "+text);
+		SubNode condx2 = null;
+		
+		if(text.contains("(")) {
+			String cname2 = text.substring(0,text.indexOf('('));
+			String cval2 = text.substring(text.indexOf('(')+1, text.lastIndexOf(')'));
+			condx2 = new SubNode(cname2.trim());
+			/// TODO FIX, this is a function(blah="blah", blah="blah")
+			
+			
+			if(cval2.contains(",")) {
+				String[] p = cval2.split(",");
+				
+				// Attributes
+				for(String pa : p) {
+					if(pa.contains("=")) {
+						String[] nvpair = pa.split("=",2); // ,2
+						String name = nvpair[0].trim();
+						
+						SubNode valn = new SubNode(name);
+						valn.value = nvpair[1].replaceAll("\"", "").trim();
+						condx2.attributes.put(name, valn);
+					}
+				}
+			}else { // ?
+				if(cval2.contains("=")) {
+					String[] nvpair = cval2.split("=",2);
+					String name = nvpair[0].trim();
+					
+					SubNode valn = new SubNode(name);
+					valn.value = nvpair[1].replaceAll("\"", "").trim();
+					condx2.attributes.put(name, valn);
+				}else {
+					SubNode valn = new SubNode("check_value");
+					SubNode exact = new SubNode("exact");
+					exact.value = cval2.replaceAll("\"", "").trim();
+					valn.attributes.put("exact", exact);
+					condx2.children.add(valn);
+				}
+			}
+		}else {
+			SubNode valn = new SubNode("check_value");
+			SubNode exact = new SubNode("exact");
+			exact.value = text.replaceAll("\"", "").trim();
+			valn.attributes.put("exact", exact);
+			condx2 = valn; //.children.add(valn);
+		}
+		
+		/*
+		 * <check_any>
+	          <event_object_attacked group="$localtargetgroup"/>
+	          <event_object_signalled object="this.sector" param="'police'" check="false"/>
+	        </check_any>
+	        <set_value name="$attacker" exact="if (event.name == 'event_object_attacked') then event.param else event.param2"/>
+	        <check_value value="$police"/>
+	        <check_value value="this.sector.exists"/>
+	        <check_value value="$attacker.isoperational"/>
+	        <check_value value="$attacker.zone.policefaction"/>
+	        <check_value value="not this.hasrelation.enemy.{$attacker.zone.policefaction}" comment="Check that the police faction is not an enemy"/>
+	        <check_value value="$attacker.owner != this.owner" />
+	        <check_value value="$attacker.owner != event.param3.owner"/>
+		 */
+		
+		return condx2;
+	}
+	
+	
+	
+	private static int countbrackets(String line, char a, char b, int bcnt) {
+		int initial = bcnt;
+		boolean wasabove=false;
+		for(char c : line.toCharArray()) {
+			if(bcnt <= 0 && wasabove) break;
+			if(bcnt > initial) wasabove=true;
+			if(c == a) bcnt ++;
+			else if(c == b) bcnt --;
+		}
+		
+		return bcnt;
+	}
+
 
 	private static SubNode setSubNode_setvalue(String text) {
 		SubNode node;
@@ -515,13 +703,19 @@ public class JS2XML {
 
 	private static SubNode setSubNode_IfWhile(String text) {
 		SubNode node;
-		String name = text.substring(0,text.indexOf("("));
-		node = new SubNode(name);
-		String val = text.substring(text.indexOf("(")+1, text.lastIndexOf(")")).replace("\"", "");;
-		SubNode value = new SubNode("value");
-		value.value = val;
-		node.attributes.put("value", value);
-		//System.out.println("	setSubNode if("+val+"){");
+		
+		if(text.startsWith("do_any") || text.startsWith("any")) {
+			node = new SubNode("any");
+		}else {		
+			String name = text.substring(0,text.indexOf("("));
+			node = new SubNode(name);
+			String val = text.substring(text.indexOf("(")+1, text.lastIndexOf(")")).replace("\"", "");;
+			SubNode value = new SubNode("value");
+			value.value = val;
+			node.attributes.put("value", value);
+			//System.out.println("	setSubNode if("+val+"){");
+		}
+		
 		return node;
 	}
 	

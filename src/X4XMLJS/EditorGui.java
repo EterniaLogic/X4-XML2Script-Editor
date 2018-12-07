@@ -53,6 +53,7 @@ public class EditorGui {
 	public static void main(String[] args) {
 		
 		XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/cat/aiscripts/order.move.recon.xml");
+		//XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/cat/aiscripts/boarding.pod.return.xml");
 		String js = x2js.getJS();
 		
 		// save

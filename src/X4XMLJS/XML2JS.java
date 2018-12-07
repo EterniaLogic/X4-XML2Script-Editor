@@ -139,37 +139,42 @@ public class XML2JS {
 			if(child2.getNodeName().equals("#comment")) text += toTab(tabulation)+handleComment(child2.getNodeValue(),tabulation);
 			
 			if(child2.getNodeName().equals("param")) {
-				// single <param name="???" />
-				String name = getAttrValue(child2,"name");
-				String type = getAttrValue(child2,"type").equals("") ? "" : getAttrValue(child2,"type")+" ";
-				String value = getAttrValue(child2,"value");
-				List<Node> attrs = getAttrs(child2);
-				String paramnamescomment="";
-				String paramvals="";
-				for(Node n : attrs) {
-					if(!n.getNodeName().equals("name") && !n.getNodeName().equals("type") && !n.getNodeName().equals("value")) {
-						paramnamescomment += n.getNodeName()+", ";
-						paramvals += "\""+n.getNodeValue()+"\", ";
-					}
-				}
-				
-				// trim text, the lazy way
-				if(paramnamescomment.length() > 2)	paramnamescomment=paramnamescomment.substring(0, paramnamescomment.length()-2);
-				if(paramnamescomment.length() > 2) paramvals=paramvals.substring(0, paramvals.length()-2);
-				if(paramnamescomment.length() > 0) paramnamescomment=" // {"+paramnamescomment+"}";
-				
-				if(child2.hasChildNodes()) {
-					text += toTab(tabulation)+"param "+type+name+"("+value+paramvals+"){"+paramnamescomment+"\n";
-					for(Node n : getChildren(child2)) {
-						text += toTab(tabulation+1)+n.getNodeName()+" "+getAttrValue(n,"name")+" = \""+getAttrValue(n,"value")+"\";\n";
-					}
-					text += toTab(tabulation)+"}\n";
-				}else {
-					text += toTab(tabulation)+"param "+type+name+"("+value+paramvals+");"+paramnamescomment+"\n";
-				}
+				text = processParams_param(tabulation, text, child2);
 			}
 		}
 		
+		return text;
+	}
+
+	private String processParams_param(int tabulation, String text, Node child2) {
+		// single <param name="???" />
+		String name = getAttrValue(child2,"name");
+		String type = getAttrValue(child2,"type").equals("") ? "" : getAttrValue(child2,"type")+" ";
+		String value = getAttrValue(child2,"value");
+		List<Node> attrs = getAttrs(child2);
+		String paramnamescomment="";
+		String paramvals="";
+		for(Node n : attrs) {
+			if(!n.getNodeName().equals("name") && !n.getNodeName().equals("type") && !n.getNodeName().equals("value")) {
+				paramnamescomment += n.getNodeName()+", ";
+				paramvals += "\""+n.getNodeValue()+"\", ";
+			}
+		}
+		
+		// trim text, the lazy way
+		if(paramnamescomment.length() > 2)	paramnamescomment=paramnamescomment.substring(0, paramnamescomment.length()-2);
+		if(paramnamescomment.length() > 2) paramvals=paramvals.substring(0, paramvals.length()-2);
+		if(paramnamescomment.length() > 0) paramnamescomment=" // {"+paramnamescomment+"}";
+		
+		if(child2.hasChildNodes()) {
+			text += toTab(tabulation)+"param "+type+name+"("+value+paramvals+"){"+paramnamescomment+"\n";
+			for(Node n : getChildren(child2)) {
+				text += toTab(tabulation+1)+n.getNodeName()+" "+getAttrValue(n,"name")+" = \""+getAttrValue(n,"value")+"\";\n";
+			}
+			text += toTab(tabulation)+"}\n";
+		}else {
+			text += toTab(tabulation)+"param "+type+name+"("+value+paramvals+");"+paramnamescomment+"\n";
+		}
 		return text;
 	}
 	
@@ -236,8 +241,7 @@ public class XML2JS {
 				}else if(child2.getNodeName().equals("check_value")){
 					text += getAttrValue(child2,"value");
 				}else {
-					text += child2.getNodeName()+"("+strAttrsOnly(child2)+")";
-					com += strAttrsComment(child2)+"";
+					text += child2.getNodeName()+"("+strAttrs(child2)+")";
 				}
 				
 				if(list.get(list.size()-1) != child2) {
@@ -284,6 +288,8 @@ public class XML2JS {
 				text += handleActions(child2,tabulation+1);
 				text += toTab(tabulation)+"}";
 				last_if=true;
+			}else if(child2.getNodeName().equals("param")) {// <param name="?"
+				text += processParams_param(tabulation, text, child2);
 			}else if(child2.getNodeName().equals("do_else")) { // keeps on messing up?
 				if(!last_if) text += toTab(tabulation);
 				text += "else{\n";
