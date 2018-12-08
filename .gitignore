@@ -1,5 +1,8 @@
 # cat files, to prevent copyright strike
 cat/
+test*.xml
+test*.script
+test*.test
 
 
 # Compiled class file

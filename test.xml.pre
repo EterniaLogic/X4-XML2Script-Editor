@@ -1,0 +1,48 @@
+<aiscript xsi:noNamespaceSchemaLocation="aiscripts.xsd" name="boarding.pod.return" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+        <param name="target" />
+        <param name="initialwaittime" />
+        <param default="0" name="debugoutputchance" />
+        <handler ref="TargetInvalidHandler" />
+        <attention min="visible">
+            <if value="not $target.exists">
+                <debug_text text="'Error: target is not valid [Owen]'" />
+                <return />
+            <if value="$target != player.occupiedship">
+                <debug_text text="'Error: non-player occupied ship case not currently supported [Owen]'" />
+                <return />
+            <if value="$target.dockslot">
+                <debug_text chance="$debugoutputchance" text="'Target is docked. Immediatly return.'" />
+            <wait exact="$initialwaittime" />
+            <#comment "TODO @Owen detatch_object action - warp is 1 frame delayed. restore=""" />
+            <if value="not this.ship.parent.isclass.zone">
+                <debug_text chance="$debugoutputchance" text="'Disengaging from ' + this.ship.parent + ' ' + this.ship.parent.knownname" />
+                <#comment "TODO @Owen improve movement so disabling collisions is not needed" />
+                <disable_collisions_between object="this.ship" target="this.ship.parent" />
+                <warp zone="this.zone" object="this.ship">
+                    <position object="this.ship" />
+                <wait exact="1ms" />
+                <debug_text chance="$debugoutputchance" text="'Now a child of ' + this.ship.parent + ' ' + this.ship.parent.knownname" />
+            <#comment "Initial movement to clear boarded object" />
+            <move_to uselocalhighways="false" destination="$target" finishonapproach="true" forcesteering="true" object="this.ship">
+                <interrupt_after_time time="3s" />
+            <set_avoid_collisions bigobjects="false" object="this.ship" smallobjects="false" />
+            <find_dockingbay name="$dock" object="$target">
+                <match_dock size="this.ship.docksize" />
+            <if value="$dock">
+                <get_docking_approach_pos rotation="$approachrot" ship="this.ship" position="$approachpos" dock="$dock" />
+                <move_to flightbehaviour="flightbehaviour.boardingpod" uselocalhighways="false" destination="$dock.component" finishonapproach="true" avoid="false" object="this.ship">
+                    <position value="$approachpos" />
+                    <rotation value="$approachrot" />
+                    <interrupt_after_time time="30s" />
+                <debug_text text="'move_docking'" />
+                <move_docking flightbehaviour="flightbehaviour.dock_highspeed" dock="$dock" object="this.ship" />
+                <debug_text text="'docked'" />
+            <else>
+                <#comment "TODO @Owen" />
+            <#comment "Fire a signal the MD Boarding script is waiting for" />
+            <signal_objects param="'boarding.pod'" object="this.ship" param2="'returned'" />
+            <wait exact="1ms" />
+            <destroy_object explosion="false" object="this.ship" />
+        <attention min="unknown">
+            <#comment "cleanup" />
+            <destroy_object explosion="false" object="this.ship" />

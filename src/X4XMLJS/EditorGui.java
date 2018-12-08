@@ -64,7 +64,15 @@ public class EditorGui {
 	    writer.close();
 		}catch(Exception e) {}
 		
-		JS2XML.getXML(js);
+		String xml = JS2XML.getXML(js);
+	    
+	 // save XML
+ 		try {
+	 		String saveloc = System.getProperty("user.dir")+"/test.xml.test";
+	 		BufferedWriter writer = new BufferedWriter(new FileWriter(new File(saveloc)));
+	 	    writer.write(xml);
+	 	    writer.close();
+ 		}catch(Exception e) {}
 		
 		
 		

@@ -9,9 +9,11 @@ import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.xml.XMLConstants;
 import javax.xml.bind.DatatypeConverter;
@@ -29,15 +31,31 @@ import org.w3c.dom.Node;
 import org.xml.sax.SAXException;
 
 public class JS2XML {
+	private static boolean interrupts=false, paramsx=false;
+	private static SubNode intnode = null, paramnode = null; 
+	
+	
+	private static int countbrackets(String line, char a, char b, int bcnt) {
+		int initial = bcnt;
+		boolean wasabove=false;
+		for(char c : line.toCharArray()) {
+			if(bcnt <= 0/* && wasabove*/) break;
+			//if(bcnt > initial) wasabove=true;
+			if(c == a) bcnt ++;
+			else if(c == b) bcnt --;
+		}
+		
+		return bcnt;
+	}
 	
 	// Quite a few tags were stripped when it was converted to a script. Now, they must be put back in.
 	public static String getXML(String js) {
 		// First, determine what we are doing.
-		String xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?>";
+		String xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
 		
 		// write out debug file
 		try {
-			BufferedWriter writer2 = new BufferedWriter(new FileWriter(System.getProperty("user.dir")+"/test.xml"));
+			BufferedWriter writer2 = new BufferedWriter(new FileWriter(System.getProperty("user.dir")+"/test.xml.script"));
 			writer2.write(js);
 		    writer2.close();
 		} catch (IOException e) {
@@ -49,12 +67,10 @@ public class JS2XML {
 		
 		
 		// loop through and split up text by brackets into nodes
-		List<SubNode> nodes = toNodes(js,0);
+		List<SubNode> nodes = toNodes(js, "root", 0);
 		
 		// report
-		if(nodes.size() == 0) {
-			// report syntax error and location/line.
-		}else {
+		if(nodes.size() > 0) {
 			for(SubNode n : nodes) {
 				if(n != null)
 					n.printnode(0);
@@ -63,11 +79,19 @@ public class JS2XML {
 		}
 		
 		// convert nodes to XML
+		if(nodes.size() > 0) {
+			for(SubNode n : nodes) {
+				if(n != null)
+					xml += n.toXML(0);
+				else xml += "null node\n";
+			}
+		}
 		
+		// verify XML
 		
 		// write out debug file
 		try {
-			BufferedWriter writer2 = new BufferedWriter(new FileWriter(System.getProperty("user.dir")+"/test2.xml"));
+			BufferedWriter writer2 = new BufferedWriter(new FileWriter(System.getProperty("user.dir")+"/test2.xml.script"));
 			writer2.write(js);
 		    writer2.close();
 		} catch (IOException e) {
@@ -77,6 +101,278 @@ public class JS2XML {
 		return xml;
 	}
 	
+	// returns null if syntax error, secondary syntax detector will kick in
+	private static List<SubNode> toNodes(String innerjs, String parentnodename, int bracket) {
+		LinkedList<SubNode> nodes = new LinkedList<SubNode>();
+		
+		// loop through each character in each line to verify:
+		//	A - is a container type?
+		//  B - extract information from the tag
+		
+		boolean mlcomment = false; // used to work with /**/ comments
+		LinkedList<String> mlcomment_text = new LinkedList<String>();
+		
+		String[] lines = innerjs.split("\n");
+		for(int l=0;l<lines.length;l++) {
+			
+			// split line up by parts.
+			String line = lines[l].trim();
+			String text = line, comment = "", params="";
+			
+			if(line.length() == 0) continue;
+			
+			System.out.println(XML2JS.toTab(bracket)+"process -- "+text);
+			try {
+				if(mlcomment) {
+					if(text.contains("*/")) {
+						System.out.println("mlcomment end");
+						//int loc = text.indexOf("*/");
+						//mlcomment_text.add(text.substring(loc+2,text.length()-1));
+						mlcomment = false;
+						
+						// save node
+						SubNode comment1 = new SubNode("#comment");
+						for(String cline : mlcomment_text) {
+							comment1.value += cline;
+							if(!cline.equals(mlcomment_text.get(mlcomment_text.size()-1))) 
+								comment1.value+="\n";
+						}
+						
+						mlcomment_text.clear();
+						nodes.add(comment1);
+					}else {
+						mlcomment_text.add(text);
+					}
+					
+					continue;
+				}else if(text.startsWith("/*")){
+					mlcomment = true;
+					System.out.println("mlcomment start");
+					mlcomment_text.add(text.substring(0, text.length()));
+					
+					continue;
+				}else {
+					String[] stripped = stripParams(text);
+					text = stripped[0];
+					params = stripped[1];
+					comment = stripped[2];
+				}
+				
+				
+				if(text.length() > 0) {
+					// does this line open a bracket of subnodes?
+					
+					if(text.endsWith("{")) {
+						System.out.println("OPENBRACKET for "+text);
+						
+						SubNode nodex = setSubNode(text,params);
+						interrupt_nodehandle(nodes, text, nodex, parentnodename);
+						param_nodehandle(nodes, text, nodex, parentnodename);
+						
+						if(interrupts && text.startsWith("#interrupt")) {
+							nodes.add(intnode);
+							System.out.println("interrupts } add " + nodex.name);
+						}else if(paramsx && text.startsWith("param ")) {
+							nodes.add(paramnode);
+							System.out.println("params } add " + nodex.name);
+						}else {
+							nodes.add(nodex);
+						}
+						
+						
+						// find the exit bracket, all lines in-between are considered inner script
+						LinkedList<String> innerlines = new LinkedList<String>();
+						int bcnt = 1; // count brackets
+						//int a=l+1, b=l+1;
+						for(int j=l+1;j<lines.length;j++) {
+							String linex = lines[j];
+							String textx = linex.contains("//") ? linex.substring(0,linex.indexOf("//")) : linex; // strip comment temporarily
+							
+							bcnt = countbrackets(textx, '{', '}', bcnt);
+							System.out.println("bcnt: "+bcnt+"  ---     "+textx);
+							
+							
+							if(textx.contains("}") && bcnt <= 0) {
+								// ending, send innerjs to recursion
+								//b=j;
+								String innerlinesx = "";
+								for(String s : innerlines) innerlinesx += s+"\n";
+								
+								
+								List<SubNode> nodesx = toNodes(innerlinesx, nodex.name, bracket+1); 
+								
+								System.out.println("CLOSEBRACKET LINE: "+j);
+								System.out.println("CLOSEBRACKET NODE: "+nodex.name);
+								//nodex.children.addAll(nodesx);
+								nodex.addChildren(nodesx);
+								
+								
+								
+								
+								
+								//System.out.println("BRACKET: "+nodex.name+" attrcount:"+nodex.attributes.size());
+								
+								// jump forward
+								if(textx.contains("else")) { // }else{ or }else if(){
+									l=j-1;
+								}else
+									l=j;
+								
+								break;
+							}else {
+								innerlines.add(linex);
+							}
+						}
+					}else {
+						
+						
+						if(!text.equals("}")) {
+							System.out.println("FUNCX("+comment);
+							SubNode nodex = setSubNode(text,params);
+							
+							interrupt_nodehandle2(nodes, text, nodex, parentnodename);
+							param_nodehandle2(nodes, text, nodex, parentnodename);
+						}else {
+							//System.out.println("BRACKETEND");
+						}
+					}
+				}else if(text.equals("") && !comment.equals("")){ // comment
+					SubNode comment1 = new SubNode("#comment");
+					comment1.value=comment;
+					nodes.add(comment1);
+				}else if(text.equals("") && comment.equals("")){
+					// nothing
+				}else {
+					System.out.println("not handled?");
+				}
+				
+				// FUNCLIKE: param("byhostile", "true"); // {name=?, value=?}
+				// LOOP: if(this.ship.jobexpired){
+				// SETVAL: $debugchance = $init_debugchance;
+				// DEL: delete this.$police_cleared;
+			}catch(Exception e) {
+				e.printStackTrace();
+			}
+		}
+		
+		// convert // and /* */ to comment tags (<!-- -->)
+		
+		return nodes;
+	}
+
+	private static void interrupt_nodehandle2(LinkedList<SubNode> nodes, String text, SubNode nodex, String parentnodename) {
+		if(parentnodename.equals("create_order")) {
+			nodes.add(nodex);
+			return;
+		}
+		
+		if(text.startsWith("#interrupt")/* && !paramsx*/) {
+			if(interrupts) {
+				intnode.children.add(nodex);
+				System.out.println("interrupts add " + nodex.name);
+			}else {
+				intnode = new SubNode("interrupts");
+				intnode.children.add(nodex);
+				interrupts = true;
+				System.out.println("interrupts start " + nodex.name);
+			}
+		}else if(interrupts) {
+			nodes.add(intnode);
+			nodes.add(nodex);
+			intnode=null;
+			interrupts = false;
+			System.out.println("interrupts end " + nodex.name);
+		}else if(!paramsx && !text.startsWith("param ")) { // prevent dual-copy
+			nodes.add(nodex);
+		}
+	}
+	
+	private static void param_nodehandle2(LinkedList<SubNode> nodes, String text, SubNode nodex, String parentnodename) {
+		if(parentnodename.equals("create_order")) {
+			nodes.add(nodex);
+			return;
+		}
+		
+		if(text.startsWith("param ") && !interrupts) {
+			if(paramsx) {
+				paramnode.children.add(nodex);
+				System.out.println("params add " + nodex.name);
+			}else {
+				paramnode = new SubNode("params");
+				paramnode.children.add(nodex);
+				paramsx = true;
+				System.out.println("params start " + nodex.name);
+			}
+		}else if(paramsx) {
+			nodes.add(paramnode);
+			if(!interrupts) nodes.add(nodex);
+			paramnode=null;
+			paramsx = false;
+			System.out.println("params end " + nodex.name);
+		}else if(!interrupts && !text.startsWith("#interrupt")) { // prevent dual-copy
+			if(!nodes.contains(nodex))
+				nodes.add(nodex);
+		}
+	}
+
+	
+	private static void param_nodehandle(LinkedList<SubNode> nodes, String text, SubNode nodex, String parentnodename) {
+		if(parentnodename.equals("create_order")) {
+			nodes.add(nodex);
+			return;
+		}
+		
+		if(text.startsWith("param ") && !interrupts) {
+			if(paramsx) {
+				//intnode.children.add(nodex);
+				System.out.println("params { add " + text);
+			}else {
+				paramnode = new SubNode("params");
+				//intnode.children.add(nodex);
+				paramsx = true;
+				System.out.println("params { start " + text);
+			}
+		}else if(paramsx) {
+			nodes.add(paramnode);
+			paramnode=null;
+			paramsx = false;
+			System.out.println("params { end " + text);
+		}else if(!interrupts && !text.startsWith("#interrupt")) { // prevent dual-copy
+			//if(!nodes.contains(nodex))
+			//	nodes.add(nodex);
+		}
+	}
+	
+	private static void interrupt_nodehandle(LinkedList<SubNode> nodes, String text, SubNode nodex, String parentnodename) {
+		if(parentnodename.equals("create_order")) {
+			nodes.add(nodex);
+			return;
+		}
+		
+		
+		if(text.startsWith("#interrupt")/* && !paramsx*/) {
+			
+			if(interrupts) {
+				//intnode.children.add(nodex);
+				System.out.println("interrupts { add " + text);
+			}else {
+				intnode = new SubNode("interrupts");
+				//intnode.children.add(nodex);
+				interrupts = true;
+				System.out.println("interrupts { start " + text);
+			}
+		}else if(interrupts) {
+			nodes.add(intnode);
+			intnode=null;
+			interrupts = false;
+			System.out.println("interrupts { end " + text);
+		}else if(!paramsx && !text.startsWith("param ")) { // prevent dual-copy
+			//nodes.add(nodex);
+		}
+	}
+	
+	
+
 	private static String preprocess(String injs) {
 		injs = injs.replaceAll("\t", "");
 		
@@ -84,7 +380,7 @@ public class JS2XML {
 		
 		return injs;
 	}
-	
+
 	private static String preprocess_combineparams(String injs) {
 		// loop through each line and combine lines
 		// look for lines that are multiple parts of a single conditional or function. and put them together.
@@ -125,135 +421,9 @@ public class JS2XML {
 		
 		return newl;
 	}
+
 	
-	// returns null if syntax error, secondary syntax detector will kick in
-	private static List<SubNode> toNodes(String innerjs, int bracket) {
-		LinkedList<SubNode> nodes = new LinkedList<SubNode>();
-		
-		// loop through each character in each line to verify:
-		//	A - is a container type?
-		//  B - extract information from the tag
-		
-		boolean mlcomment = false; // used to work with /**/ comments
-		LinkedList<String> mlcomment_text = new LinkedList<String>();
-		
-		String[] lines = innerjs.split("\n");
-		for(int l=0;l<lines.length;l++) {
-			
-			// split line up by parts.
-			String line = lines[l].trim();
-			String text = line, comment = "", params="";
-			
-			if(line.length() == 0) continue;
-			
-			System.out.println(XML2JS.toTab(bracket)+"process -- "+text);
-			try {
-				if(mlcomment) {
-					if(text.contains("*/")) {
-						System.out.println("mlcomment end");
-						int loc = text.indexOf("*/");
-						mlcomment_text.add(text.substring(loc+2,text.length()-1));
-						mlcomment = false;
-						
-						// save node
-						SubNode comment1 = new SubNode("#comment");
-						for(String cline : mlcomment_text) {
-							comment1.value += cline;
-							if(!cline.equals(mlcomment_text.get(mlcomment_text.size()-1))) 
-								comment1.value+="\n";
-						}
-						
-						nodes.add(comment1);
-					}else {
-						mlcomment_text.add(text);
-					}
-				}else {
-					String[] stripped = stripParams(text);
-					text = stripped[0];
-					params = stripped[1];
-					comment = stripped[2];
-				}
-				
-				
-				if(text.length() > 0) {
-					// does this line open a bracket of subnodes?
-					
-					if(text.contains("{")) {
-						System.out.println("OPENBRACKET for "+text);
-						
-						// find the exit bracket, all lines in-between are considered inner script
-						LinkedList<String> innerlines = new LinkedList<String>();
-						int bcnt = 1; // count brackets
-						//int a=l+1, b=l+1;
-						for(int j=l+1;j<lines.length;j++) {
-							String linex = lines[j];
-							String textx = linex.contains("//") ? linex.substring(0,linex.indexOf("//")) : linex; // strip comment temporarily
-							
-							bcnt = countbrackets(textx, '{', '}', bcnt);
-							//System.out.println("bcnt: "+bcnt+"  ---     "+textx);
-							
-							if(textx.contains("}") && bcnt <= 0) {
-								// ending, send innerjs to recursion
-								//b=j;
-								String innerlinesx = "";
-								for(String s : innerlines) innerlinesx += s+"\n";
-								
-								SubNode nodex = setSubNode(text,params);
-								List<SubNode> nodesx = toNodes(innerlinesx, bracket+1); 
-								
-								System.out.println("CLOSEBRACKET LINE: "+j);
-								System.out.println("CLOSEBRACKET NODE: "+nodex.name);
-								nodex.children.addAll(nodesx);
-								nodes.add(nodex);
-								
-								//System.out.println("BRACKET: "+nodex.name+" attrcount:"+nodex.attributes.size());
-								
-								// jump forward
-								if(textx.contains("else")) { // }else{ or }else if(){
-									l=j-1;
-								}else
-									l=j;
-								
-								break;
-							}else {
-								innerlines.add(linex);
-							}
-						}
-					}else {
-						
-						
-						if(!text.equals("}")) {
-							//System.out.println("FUNCX("+comment);
-							SubNode nodex = setSubNode(text,params);
-							nodes.add(nodex);
-						}else {
-							//System.out.println("BRACKETEND");
-						}
-					}
-				}else if(text.equals("") && !comment.equals("")){
-					SubNode comment1 = new SubNode("#comment");
-					comment1.value=comment;
-					nodes.add(comment1);
-				}else if(text.equals("") && comment.equals("")){
-					// nothing
-				}else {
-					System.out.println("not handled?");
-				}
-				
-				// FUNCLIKE: param("byhostile", "true"); // {name=?, value=?}
-				// LOOP: if(this.ship.jobexpired){
-				// SETVAL: $debugchance = $init_debugchance;
-				// DEL: delete this.$police_cleared;
-			}catch(Exception e) {
-				e.printStackTrace();
-			}
-		}
-		
-		// convert // and /* */ to comment tags (<!-- -->)
-		
-		return nodes;
-	}
-	
+
 	private static SubNode setSubNode(String text, String params) {
 		SubNode node=null;
 		
@@ -290,6 +460,7 @@ public class JS2XML {
 			node = setSubNode_param(text, valuelist);
 		}else if(text.startsWith("function ")) { // function name(value1, value2){ // {param1, param2}
 			node = setSubNode_function(text, valuelist);
+			
 		}else if(text.startsWith("if(") || text.startsWith("while(") || text.startsWith("do_any")
 				 || text.startsWith("any")) { // if(value){
 			node = setSubNode_IfWhile(text);
@@ -302,10 +473,10 @@ public class JS2XML {
 			node = setSubNode_IfWhile(text);
 		}else if(text.contains(");")) { // func(value, value); // {param, param}
 			node = setSubNode_func_nobracket(text, valuelist);
-		}else if(text.contains("=")) { // varname=b;
-			node = setSubNode_setvalue(text);
 		}else if(text.contains("){")) { // func(value, value){ // {param, param}
 			node = setSubNode_func_bracket(text, valuelist);
+		}else if(text.contains("=")) { // varname=b;
+			node = setSubNode_setvalue(text);
 		}else {
 			System.out.println("setSubNode name attribute not handled!");
 		}
@@ -342,14 +513,48 @@ public class JS2XML {
 		return node;
 	}
 
+	private static SubNode setSubNode_aiscript(String text) {
+		SubNode node;
+		//System.out.println("setSubNode aiscript");
+		String name = text.substring(9,text.indexOf("{"));
+		
+		node = new SubNode("aiscript");
+		node.putAttrNode("name", name);
+		
+		//System.out.println("	setSubNode aiscript "+name+"{");
+		return node;
+	}
+
+	private static SubNode setSubNode_create(String text) {
+		SubNode node;
+		//System.out.println("setSubNode setValue (create)");
+		String name = text.substring(8, text.lastIndexOf(";")).replace("\"", "");
+		
+		node = new SubNode("set_value");
+		
+		node.putAttrNode("name", name);
+		return node;
+	}
+
+	private static SubNode setSubNode_delete(String text) {
+		SubNode node;
+		//System.out.println("setSubNode setValue (delete)");
+		String name = text.substring(8, text.lastIndexOf(";")).replace("\"", "");
+		
+		node = new SubNode("remove_value");
+		
+		node.putAttrNode("name", name);
+		return node;
+	}
+
 	private static SubNode setSubNode_func_bracket(String text, List<String> valuelist) {
 		SubNode node;
-		System.out.println("setSubNode ){");
+		//System.out.println("setSubNode ){");
 		String name = text.substring(0,text.indexOf("("));
 		node = new SubNode(name);
-		System.out.println("	setSubNode "+name+"(???){");
+		//System.out.println("	setSubNode "+name+"(???){");
 		String vals = text.substring(text.indexOf("(")+1, text.lastIndexOf(")"));
-		System.out.println("	setSubNode FUNC("+vals+"){");
+		//System.out.println("	setSubNode FUNC("+vals+"){");
 		
 		String svals = vals.replace(", ", ",");
 		if(svals.contains("\",\"")) {
@@ -360,16 +565,16 @@ public class JS2XML {
 				valuelist.add(vals.replace("\"", ""));
 		}
 		
-		System.out.println("	setSubNode FUNC("+svals+"){");
+		//System.out.println("	setSubNode FUNC("+svals+"){");
 		return node;
 	}
 
 	private static SubNode setSubNode_func_nobracket(String text, List<String> valuelist) {
 		SubNode node;
-		System.out.println("setSubNode );");
+		//System.out.println("setSubNode );");
 		String name = text.substring(0,text.indexOf("("));
 		node = new SubNode(name);
-		System.out.println("	setSubNode "+name+"(???);");
+		//System.out.println("	setSubNode "+name+"(???);");
 		String vals = text.substring(text.indexOf("(")+1, text.lastIndexOf(")"));
 		
 		String svals = vals.replace(", ", ",");
@@ -382,50 +587,58 @@ public class JS2XML {
 		}
 		
 		
-		System.out.println("	setSubNode FUNC("+vals+");");
+		//System.out.println("	setSubNode FUNC("+vals+");");
 		return node;
 	}
-
-	private static SubNode setSubNode_delete(String text) {
+	
+	private static SubNode setSubNode_function(String text, List<String> valuelist) {
 		SubNode node;
-		System.out.println("setSubNode setValue (delete)");
-		String name = text.substring(8, text.lastIndexOf(";")).replace("\"", "");
+		//System.out.println("setSubNode function");
+		String name = text.substring(9,text.indexOf("("));
+		node = new SubNode(name);
+		String vals = text.substring(text.indexOf("(")+1, text.lastIndexOf(")"));
+		vals = vals.replace(", ", ",");
 		
-		node = new SubNode("remove_value");
+		if(name.equals("attention")) {
+			// add action subnode
+			SubNode actions = new SubNode("actions");
+			node.children.add(actions);
+		}
 		
-		SubNode namen = new SubNode("name");
-		namen.value = name;
-		node.attributes.put("name", namen);
+		if(vals.contains("\",\"")) {
+			for(String s : vals.split("\",\"")) 
+				valuelist.add(s.replace("\"", ""));
+		}else {
+			if(vals.length() > 0) {
+				if(name.equals("attention")) {
+					node.putAttrNode("min", vals);
+				}else valuelist.add(vals.replace("\"", ""));
+			}
+		}
+		
+		
+		
+		//System.out.println("	setSubNode ! function "+name+"("+vals+"){");
 		return node;
 	}
 
-	private static SubNode setSubNode_create(String text) {
+	private static SubNode setSubNode_IfWhile(String text) {
 		SubNode node;
-		System.out.println("setSubNode setValue (create)");
-		String name = text.substring(8, text.lastIndexOf(";")).replace("\"", "");
 		
-		node = new SubNode("set_value");
+		if(text.startsWith("do_any") || text.startsWith("any")) {
+			node = new SubNode("any");
+		}else {		
+			String name = text.substring(0,text.indexOf("("));
+			node = new SubNode(name);
+			String val = text.substring(text.indexOf("(")+1, text.lastIndexOf(")")).replace("\"", "");;
+			node.putAttrNode("value", val);
+		}
 		
-		SubNode namen = new SubNode("name");
-		namen.value = name;
-		node.attributes.put("name", namen);
 		return node;
 	}
-
-	private static SubNode setSubNode_interrupt_ref(String text) {
-		SubNode node;
-		System.out.println("setSubNode #interrupt ref");
-		String val = text.substring(text.indexOf("(")+1, text.lastIndexOf(")")).replace("\"", "");
-		
-		node = new SubNode("handler");
-		SubNode ref = new SubNode("ref");
-		ref.value = val;
-		node.attributes.put("ref", ref);
-		
-		System.out.println("	setSubNode ref="+val);
-		return node;
-	}
-
+	
+	
+	
 	private static SubNode setSubNode_inputparam(String text) {
 		SubNode node;
 		//System.out.println("setSubNode inputparam name =    "+text);
@@ -435,30 +648,13 @@ public class JS2XML {
 		name = name.substring(12,name.length());
 		
 		node = new SubNode("input_param");
-		SubNode namen = new SubNode("name");
-		namen.value = name;
-		node.attributes.put("name", namen);
-		SubNode valuen = new SubNode("value");
-		valuen.value = exact;
-		node.attributes.put("value", valuen);
+		node.putAttrNode("name", name);
+		node.putAttrNode("value", exact);
 		
-		System.out.println("setSubNode inputparam name =    "+name+"="+exact);
+		//System.out.println("setSubNode inputparam name =    "+name+"="+exact);
 		return node;
 	}
 
-	private static SubNode setSubNode_aiscript(String text) {
-		SubNode node;
-		System.out.println("setSubNode aiscript");
-		String name = text.substring(9,text.indexOf("{"));
-		
-		node = new SubNode("aiscript");
-		SubNode namen = new SubNode("name");
-		namen.value = name;
-		node.attributes.put("name", namen);
-		
-		System.out.println("	setSubNode aiscript "+name+"{");
-		return node;
-	}
 
 	private static SubNode setSubNode_interrupt_if(String text, List<String> valuelist) {
 		System.out.println("setSubNode #interrupt if");
@@ -476,7 +672,7 @@ public class JS2XML {
 		// listem
 		//
 		
-		//handler.children.add(actn);
+		handler.children.add(actn);
 		
 		return handler;
 	}
@@ -534,7 +730,7 @@ public class JS2XML {
 		
 		return conn;
 	}
-
+	
 	private static SubNode condToNode(String text) {
 		System.out.println("CONDTONODE: "+text);
 		SubNode condx2 = null;
@@ -555,32 +751,26 @@ public class JS2XML {
 						String[] nvpair = pa.split("=",2); // ,2
 						String name = nvpair[0].trim();
 						
-						SubNode valn = new SubNode(name);
-						valn.value = nvpair[1].replaceAll("\"", "").trim();
-						condx2.attributes.put(name, valn);
+						condx2.putAttrNode(name, nvpair[1].replaceAll("\"", "").trim());
 					}
 				}
 			}else { // ?
 				if(cval2.contains("=")) {
 					String[] nvpair = cval2.split("=",2);
 					String name = nvpair[0].trim();
-					
-					SubNode valn = new SubNode(name);
-					valn.value = nvpair[1].replaceAll("\"", "").trim();
-					condx2.attributes.put(name, valn);
+					condx2.putAttrNode(name, nvpair[1].replaceAll("\"", "").trim());
 				}else {
 					SubNode valn = new SubNode("check_value");
-					SubNode exact = new SubNode("exact");
-					exact.value = cval2.replaceAll("\"", "").trim();
-					valn.attributes.put("exact", exact);
+					valn.putAttrNode("exact", cval2.replaceAll("\"", "").trim());
 					condx2.children.add(valn);
+					//condx2.addChild(valn);
 				}
 			}
 		}else {
 			SubNode valn = new SubNode("check_value");
-			SubNode exact = new SubNode("exact");
-			exact.value = text.replaceAll("\"", "").trim();
-			valn.attributes.put("exact", exact);
+			
+			valn.putAttrNode("exact", text.replaceAll("\"", "").trim());
+			
 			condx2 = valn; //.children.add(valn);
 		}
 		
@@ -601,68 +791,22 @@ public class JS2XML {
 		
 		return condx2;
 	}
-	
-	
-	
-	private static int countbrackets(String line, char a, char b, int bcnt) {
-		int initial = bcnt;
-		boolean wasabove=false;
-		for(char c : line.toCharArray()) {
-			if(bcnt <= 0 && wasabove) break;
-			if(bcnt > initial) wasabove=true;
-			if(c == a) bcnt ++;
-			else if(c == b) bcnt --;
-		}
-		
-		return bcnt;
-	}
 
-
-	private static SubNode setSubNode_setvalue(String text) {
+	private static SubNode setSubNode_interrupt_ref(String text) {
 		SubNode node;
-		System.out.println("setSubNode setValue=    "+text);
-		String[] vv = text.split("=");
-		String name = vv[0].trim();
-		String exact = vv[1].trim().replace(";", "");
+		//System.out.println("setSubNode #interrupt ref");
+		String val = text.substring(text.indexOf("(")+1, text.lastIndexOf(")")).replace("\"", "");
 		
-		node = new SubNode("set_value");
-		SubNode namen = new SubNode("name");
-		namen.value = name;
-		node.attributes.put("name", namen);
-		SubNode exactn = new SubNode("exact");
-		exactn.value = exact;
-		node.attributes.put("exact", exactn);
-		return node;
-	}
-
-	private static SubNode setSubNode_function(String text, List<String> valuelist) {
-		SubNode node;
-		System.out.println("setSubNode function");
-		String name = text.substring(9,text.indexOf("("));
-		node = new SubNode(name);
-		String vals = text.substring(text.indexOf("(")+1, text.lastIndexOf(")"));
-		vals = vals.replace(", ", ",");
+		node = new SubNode("handler");
+		node.putAttrNode("ref", val);
 		
-		if(vals.contains("\",\"")) {
-			for(String s : vals.split("\",\"")) 
-				valuelist.add(s.replace("\"", ""));
-		}else {
-			if(vals.length() > 0) {
-				if(name.equals("attention")) {
-					SubNode attrn = new SubNode("min");
-					attrn.value = vals;
-					node.attributes.put("min", attrn);
-				}else valuelist.add(vals.replace("\"", ""));
-			}
-		}
-		
-		System.out.println("	setSubNode ! function "+name+"("+vals+"){");
+		//System.out.println("	setSubNode ref="+val);
 		return node;
 	}
 
 	private static SubNode setSubNode_param(String text, List<String> valuelist) {
 		SubNode node;
-		System.out.println("setSubNode param {type} name(def?)");
+		//System.out.println("setSubNode param {type} name(def?)");
 		String name = text.substring(6,text.indexOf("("));
 		String val = text.substring(text.indexOf("(")+1, text.lastIndexOf(")")); //.replace("\"", "");
 		String type="";
@@ -676,14 +820,10 @@ public class JS2XML {
 		System.out.println("setSubNode param "+type+" "+name+"("+val+")");
 		
 		node = new SubNode("param");
-		SubNode namen = new SubNode("name");
-		namen.value = name;
-		node.attributes.put("name", namen);
+		node.putAttrNode("name", name);
 		
 		if(!type.equals("")) {
-			SubNode typen = new SubNode("type");
-			typen.value = type;
-			node.attributes.put("type", typen);
+			node.putAttrNode("type", type);
 		}
 		
 		String svals = val.replace("\", \"", "\",\"");
@@ -701,21 +841,16 @@ public class JS2XML {
 		return node;
 	}
 
-	private static SubNode setSubNode_IfWhile(String text) {
+	private static SubNode setSubNode_setvalue(String text) {
 		SubNode node;
+		System.out.println("setSubNode setValue=    "+text);
+		String[] vv = text.split("=",2);
+		String name = vv[0].trim();
+		String exact = vv[1].trim().replace(";", "");
 		
-		if(text.startsWith("do_any") || text.startsWith("any")) {
-			node = new SubNode("any");
-		}else {		
-			String name = text.substring(0,text.indexOf("("));
-			node = new SubNode(name);
-			String val = text.substring(text.indexOf("(")+1, text.lastIndexOf(")")).replace("\"", "");;
-			SubNode value = new SubNode("value");
-			value.value = val;
-			node.attributes.put("value", value);
-			//System.out.println("	setSubNode if("+val+"){");
-		}
-		
+		node = new SubNode("set_value");
+		node.putAttrNode("name", name);
+		node.putAttrNode("exact", exact);
 		return node;
 	}
 	
@@ -776,7 +911,7 @@ public class JS2XML {
 		}else if(newtext.contains("/*")) {
 			System.out.println("mlcomment start");
 		}else {
-			System.out.println("LINE: "+newtext);
+			//System.out.println("LINE: "+newtext);
 		}
 		
 		list.add(newtext);
@@ -787,13 +922,19 @@ public class JS2XML {
 	}
 	
 
+	private static String tag() {
+		return "";
+	}
+	
+	
+	
 	public static boolean verifyXML(String xml) {
 		try {
 			DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
 			DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
 			
 			// write a temp file so that pathing works :(
-			File ftmp = File.createTempFile("js2xml_tmp-"+md5(xml), ".xml");
+			File ftmp = File.createTempFile("js2xml_tmp-"+Utils.md5(xml), ".xml");
 			BufferedWriter writer = new BufferedWriter(new FileWriter(ftmp));
 		    writer.write(xml);
 		    writer.close();
@@ -823,23 +964,6 @@ public class JS2XML {
 		}catch(Exception e) {}
 		return false;
 	}
-	
-	private static String tag() {
-		return "";
-	}
-	
-	private static String md5(String ins) {
-		MessageDigest md;
-		try {
-			md = MessageDigest.getInstance("MD5");
-			md.update(ins.getBytes());
-		    byte[] digest = md.digest();
-		    return DatatypeConverter.printHexBinary(digest).toLowerCase();
-		} catch (NoSuchAlgorithmException e) {
-			e.printStackTrace();
-		}
-		return "";
-	}
 }
 
 class SubNode{
@@ -858,6 +982,8 @@ class SubNode{
 			System.out.print(" "+n.name+"=\""+n.value+"\"");
 		}
 		
+		value = value.replace("\"", "\\\"");
+		
 		if(!value.equals(""))
 			System.out.print(" \""+value+"\"");
 		
@@ -871,4 +997,101 @@ class SubNode{
 			else System.out.println("null node");
 		}
 	}
+	
+	// recursive down by elements
+	public String toXML(int tab) {
+		String t = "";
+		
+		if(name.equals("#comment")) {
+			t += XML2JS.toTab(tab)+"<!-- ";
+			t += value;
+			t += "-->\n";
+		}else {
+		
+			t += XML2JS.toTab(tab)+"<"+toXMLName();
+			
+			
+			
+			
+			List<SubNode> elist = new LinkedList<SubNode>();
+			for(SubNode n : attributes.values()) elist.add(n);
+			
+			List<SubNode> attrlist = new LinkedList<SubNode>();
+			String[] preflist = {"id","name", "object", "type", "dock"};
+			
+			// run attributes first and sort the 'preferred' attributes to be first
+			for(String nam : preflist) {
+				for(SubNode n : attributes.values()) {
+					if(n.name.equals(nam)) {
+						for(int i=0;i<elist.size();i++) {
+							if(elist.get(i).name.equals(nam)) {
+								elist.remove(i);
+								break;
+							}
+						}
+						attrlist.add(n);
+					}
+				}
+			}
+			
+			for(SubNode n : attrlist) {
+				//System.out.print(" "+n.name+"=\""+n.value+"\"");
+				t+=" "+n.name+"=\""+n.value+"\"";
+			}
+			
+			for(SubNode n : elist) {
+				//System.out.print(" "+n.name+"=\""+n.value+"\"");
+				t+=" "+n.name+"=\""+n.value+"\"";
+			}
+			
+			if(children.size() == 0)
+				t += " />\n";
+			else t+= ">\n";
+			
+			// loop through children
+			for(SubNode n : children) {
+				t += n.toXML(tab+1);
+			}
+			
+			
+			if(children.size() > 0)
+				t += XML2JS.toTab(tab)+"</"+toXMLName()+">\n";
+		}
+		
+		return t;
+	}
+	
+	private String toXMLName() {
+		if(name.equals("if")) return "do_if";
+		else if(name.equals("while")) return "do_while";
+		else if(name.equals("any")) return "do_any";
+		else if(name.equals("else")) return "do_else";
+		else if(name.equals("elseif")) return "do_elseif";
+		else if(name.equals("interrupt_handler_if")) return "handler";
+		
+		return name;
+	}
+	
+	public void addChild(SubNode child) {
+		if(name.equals("attention")) {
+			children.get(0).addChild(child); // add to <actions>
+		}else {
+			children.add(child);
+		}
+	}
+	
+	public void addChildren(List<SubNode> child) {
+		if(name.equals("attention")) {
+			children.get(0).addChildren(child); // add to <actions>
+		}else {
+			children.addAll(child);
+		}
+	}
+	
+	public void putAttrNode(String name, String value) {
+		SubNode namen = new SubNode(name);
+		namen.value = value;
+		this.attributes.put(name, namen);
+	}
 }
+

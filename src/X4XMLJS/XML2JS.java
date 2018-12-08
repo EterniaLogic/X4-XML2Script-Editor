@@ -90,11 +90,13 @@ public class XML2JS {
 				text += processOrder(child,1)+"\n";
 			}else if(child.getNodeName().equals("params")) {
 				text += processParams(child,1)+"\n";
+			}else if(child.getNodeName().equals("param ")) {
+				//text += processParams_param(1,"",child)+"\n";
 			}else if(child.getNodeName().equals("interrupts")) {
 				text += processInterrupts(child,1)+"\n";
 			}else if(child.getNodeName().equals("init")) {
 				text += toTab(1)+"function init(){\n";
-				text += handleActions(child,2);
+					text += handleActions(child,2);
 				text += toTab(1)+"}\n";
 			}else if(child.getNodeName().equals("attention")) {
 				text += processAttention(child,1)+"\n";
@@ -150,12 +152,13 @@ public class XML2JS {
 		// single <param name="???" />
 		String name = getAttrValue(child2,"name");
 		String type = getAttrValue(child2,"type").equals("") ? "" : getAttrValue(child2,"type")+" ";
-		String value = getAttrValue(child2,"value");
+		//String value = getAttrValue(child2,"value");
 		List<Node> attrs = getAttrs(child2);
 		String paramnamescomment="";
 		String paramvals="";
+		
 		for(Node n : attrs) {
-			if(!n.getNodeName().equals("name") && !n.getNodeName().equals("type") && !n.getNodeName().equals("value")) {
+			if(!n.getNodeName().equals("name") && !n.getNodeName().equals("type")) {
 				paramnamescomment += n.getNodeName()+", ";
 				paramvals += "\""+n.getNodeValue()+"\", ";
 			}
@@ -164,17 +167,24 @@ public class XML2JS {
 		// trim text, the lazy way
 		if(paramnamescomment.length() > 2)	paramnamescomment=paramnamescomment.substring(0, paramnamescomment.length()-2);
 		if(paramnamescomment.length() > 2) paramvals=paramvals.substring(0, paramvals.length()-2);
+		
+		//if(!value.equals("")) paramnamescomment+="value";
 		if(paramnamescomment.length() > 0) paramnamescomment=" // {"+paramnamescomment+"}";
 		
+		
+		
 		if(child2.hasChildNodes()) {
-			text += toTab(tabulation)+"param "+type+name+"("+value+paramvals+"){"+paramnamescomment+"\n";
+			text += toTab(tabulation)+"param "+type+name+"("+paramvals+"){"+paramnamescomment+"\n";
 			for(Node n : getChildren(child2)) {
 				text += toTab(tabulation+1)+n.getNodeName()+" "+getAttrValue(n,"name")+" = \""+getAttrValue(n,"value")+"\";\n";
 			}
 			text += toTab(tabulation)+"}\n";
 		}else {
-			text += toTab(tabulation)+"param "+type+name+"("+value+paramvals+");"+paramnamescomment+"\n";
+			text += toTab(tabulation)+"param "+type+name+"("+paramvals+");"+paramnamescomment+"\n";
 		}
+		
+		System.out.println("PRPCESS PARAM: "+name);
+		
 		return text;
 	}
 	
@@ -288,8 +298,8 @@ public class XML2JS {
 				text += handleActions(child2,tabulation+1);
 				text += toTab(tabulation)+"}";
 				last_if=true;
-			}else if(child2.getNodeName().equals("param")) {// <param name="?"
-				text += processParams_param(tabulation, text, child2);
+			}else if(child2.getNodeName().equals("param")) {// <param name="?" value=""
+				text += processParams_param(tabulation, "", child2);
 			}else if(child2.getNodeName().equals("do_else")) { // keeps on messing up?
 				if(!last_if) text += toTab(tabulation);
 				text += "else{\n";
@@ -382,7 +392,7 @@ public class XML2JS {
 	private String handleComment(String com, int tabs) {
 		if(com.contains("\n")) {
 			String[] lines = com.split("\n");
-			String text="/* "+lines[0]+"\n";
+			String text=toTab(tabs)+"/* "+lines[0]+"\n";
 			
 			for(int i=1;i<lines.length;i++) {
 				text += toTab(tabs+1)+lines[i]+"\n";
