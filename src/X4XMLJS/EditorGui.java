@@ -52,8 +52,9 @@ public class EditorGui {
 	 */
 	public static void main(String[] args) {
 		
-		XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/cat/aiscripts/order.move.recon.xml");
+		/*XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/cat/aiscripts/order.move.recon.xml");
 		//XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/cat/aiscripts/boarding.pod.return.xml");
+		//XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/testin.xml");
 		String js = x2js.getJS();
 		
 		// save
@@ -72,11 +73,11 @@ public class EditorGui {
 	 		BufferedWriter writer = new BufferedWriter(new FileWriter(new File(saveloc)));
 	 	    writer.write(xml);
 	 	    writer.close();
- 		}catch(Exception e) {}
+ 		}catch(Exception e) {}*/
 		
 		
 		
-		/*EventQueue.invokeLater(new Runnable() {
+		EventQueue.invokeLater(new Runnable() {
 			public void run() {
 				try {
 					EditorGui window = new EditorGui();
@@ -85,7 +86,7 @@ public class EditorGui {
 					e.printStackTrace();
 				}
 			}
-		});*/
+		});
 	}
 
 	/**
@@ -120,53 +121,7 @@ public class EditorGui {
 		JMenuItem mntmOpen = new JMenuItem("Open");
 		mntmOpen.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				fc.addChoosableFileFilter(new FileNameExtensionFilter("XML / Script", "xml", "script"));
-//				fc.addChoosableFileFilter(new FileNameExtensionFilter("XML Script", "xml.script"));
-				fc.setFileSelectionMode(JFileChooser.FILES_ONLY);
-				fc.setAcceptAllFileFilterUsed(false);
-				
-				fc.setCurrentDirectory(new File(System.getProperty("user.dir")));
-				
-				int returnval = fc.showOpenDialog(fc);
-				
-				if(returnval == JFileChooser.APPROVE_OPTION) {
-					File file = fc.getSelectedFile();
-		            System.out.println("Opening: " + file.getPath());
-		            
-		            try {
-		            	// read .xml.script
-		            	if(file.getPath().endsWith(".script")) {
-		            		JJsXmlSplitPane splitPane = new JJsXmlSplitPane();
-				            splitPane.setDividerLocation(550);
-				            splitPane.setResizeWeight(1);
-				            
-				            splitPane.xml2js = new XML2JS();
-				            splitPane.xml2js.saved=true;
-				            
-				            byte[] encoded = Files.readAllBytes(file.toPath());
-				            splitPane.JS.setText(new String(encoded, Charset.defaultCharset()));
-				            
-				            // .xml file exists?
-				            File f = new File(file.getPath().replaceAll(".xml.script", ".xml"));
-				            if(f.exists()) {
-				            	splitPane.xml2js.saveloc=f.getPath();
-				            	tabbedPane.addTab(f.getName(), null, splitPane, null);
-				            }else{
-				            	splitPane.xml2js.saved=false;
-				            	splitPane.xml2js.saveloc=f.getPath();
-				            	tabbedPane.addTab("*"+f.getName(), null, splitPane, null);
-				            }
-		            	}else { // read .xml
-			            	JJsXmlSplitPane splitPane = new JJsXmlSplitPane(file);
-				            splitPane.setDividerLocation(550);
-				            splitPane.setResizeWeight(1);
-				            
-				    		tabbedPane.addTab("*"+file.getName(), null, splitPane, null);
-		            	}
-		            }catch(Exception ex) {
-		            	ex.printStackTrace();
-		            }
-				}
+				openFile();
 			}
 		});
 		mntmOpen.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_MASK));
@@ -175,56 +130,7 @@ public class EditorGui {
 		JMenuItem mntmSave = new JMenuItem("Save");
 		mntmSave.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent arg0) {
-				// save!
-				JJsXmlSplitPane pane = (JJsXmlSplitPane) tabbedPane.getSelectedComponent();
-				if(!pane.xml2js.saved) {
-					// determine if saveloc exists
-					if(pane.xml2js.saveloc.equals("")) {
-						
-						// Save file dialog
-						fc.resetChoosableFileFilters();
-						fc.addChoosableFileFilter(new FileNameExtensionFilter("XML", "xml"));
-						if(!pane.xml2js.saveloc.equals(""))  // set default location to look in
-							fc.setCurrentDirectory(new File(pane.xml2js.saveloc));
-						int returnval = fc.showSaveDialog(fc);
-						
-						if(returnval == JFileChooser.APPROVE_OPTION) {
-							File file = fc.getSelectedFile();
-							pane.xml2js.saveloc=file.getPath();
-
-							// actually save the script first so that a user can come back to it
-							File f2 = new File(file.getPath()+".script");
-							try {
-								f2.createNewFile();
-							    BufferedWriter writer = new BufferedWriter(new FileWriter(f2));
-							    writer.write(pane.JS.getText());
-							    writer.close();
-								System.out.println("Saved: " + file.getPath()+".script");
-							    
-								
-								// convert to XML
-								try {
-									String xml=JS2XML.getXML(pane.JS.getText());
-									
-									// verify XML
-									if(!JS2XML.verifyXML(xml)) {
-										// Error out!
-									}else {
-										// save file
-										BufferedWriter writer2 = new BufferedWriter(new FileWriter(file));
-									    writer2.write(xml);
-									    writer2.close();
-										System.out.println("Saved: " + file.getPath()+".script");
-									}
-								}catch(Exception e) {
-									e.printStackTrace();
-								}
-							}catch(Exception e) {
-								e.printStackTrace();
-							}
-						}
-					}
-				}
+				saveFile();
 			}
 		});
 		mntmSave.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_MASK));
@@ -244,6 +150,109 @@ public class EditorGui {
 		JMenuItem mntmClose = new JMenuItem("Close");
 		mnFile.add(mntmClose);
 		mnFile.add(mntmExit);
+	}
+
+	private void openFile() {
+		fc.addChoosableFileFilter(new FileNameExtensionFilter("XML / Script", "xml", "script"));
+//				fc.addChoosableFileFilter(new FileNameExtensionFilter("XML Script", "xml.script"));
+		fc.setFileSelectionMode(JFileChooser.FILES_ONLY);
+		fc.setAcceptAllFileFilterUsed(false);
+		fc.setCurrentDirectory(new File(System.getProperty("user.dir")));
+		
+		// open dialog
+		int returnval = fc.showOpenDialog(fc);
+		
+		if(returnval == JFileChooser.APPROVE_OPTION) {
+			File file = fc.getSelectedFile();
+		    System.out.println("Opening: " + file.getPath());
+		    
+		    try {
+		    	// read .xml.script
+		    	if(file.getPath().endsWith(".script")) {
+		    		JJsXmlSplitPane splitPane = new JJsXmlSplitPane();
+		            splitPane.setDividerLocation(550);
+		            splitPane.setResizeWeight(1);
+		            
+		            splitPane.xml2js = new XML2JS();
+		            splitPane.xml2js.saved=true;
+		            
+		            byte[] encoded = Files.readAllBytes(file.toPath());
+		            splitPane.JS.setText(new String(encoded, Charset.defaultCharset()));
+		            
+		            // .xml file exists?
+		            File f = new File(file.getPath().replaceAll(".xml.script", ".xml"));
+		            if(f.exists()) {
+		            	splitPane.xml2js.saveloc=f.getPath();
+		            	tabbedPane.addTab(f.getName(), null, splitPane, null);
+		            }else{
+		            	splitPane.xml2js.saved=false;
+		            	splitPane.xml2js.saveloc=f.getPath();
+		            	tabbedPane.addTab("*"+f.getName(), null, splitPane, null);
+		            }
+		    	}else { // read .xml
+		        	JJsXmlSplitPane splitPane = new JJsXmlSplitPane(file);
+		            splitPane.setDividerLocation(550);
+		            splitPane.setResizeWeight(1);
+		            
+		    		tabbedPane.addTab("*"+file.getName(), null, splitPane, null);
+		    	}
+		    }catch(Exception ex) {
+		    	ex.printStackTrace();
+		    }
+		}
+	}
+
+	private void saveFile() {
+		// save!
+		JJsXmlSplitPane pane = (JJsXmlSplitPane) tabbedPane.getSelectedComponent();
+		if(!pane.xml2js.saved) {
+			// determine if saveloc exists
+			if(pane.xml2js.saveloc.equals("")) {
+				
+				// Save file dialog
+				fc.resetChoosableFileFilters();
+				fc.addChoosableFileFilter(new FileNameExtensionFilter("XML", "xml"));
+				if(!pane.xml2js.saveloc.equals(""))  // set default location to look in
+					fc.setCurrentDirectory(new File(pane.xml2js.saveloc));
+				int returnval = fc.showSaveDialog(fc);
+				
+				if(returnval == JFileChooser.APPROVE_OPTION) {
+					File file = fc.getSelectedFile();
+					pane.xml2js.saveloc=file.getPath();
+
+					// actually save the script first so that a user can come back to it
+					File f2 = new File(file.getPath()+".script");
+					try {
+						f2.createNewFile();
+					    BufferedWriter writer = new BufferedWriter(new FileWriter(f2));
+					    writer.write(pane.JS.getText());
+					    writer.close();
+						System.out.println("Saved: " + file.getPath()+".script");
+					    
+						
+						// convert to XML
+						try {
+							String xml=JS2XML.getXML(pane.JS.getText());
+							
+							// verify XML
+							if(!JS2XML.verifyXML(xml)) {
+								// Error out!
+							}else {
+								// save file
+								BufferedWriter writer2 = new BufferedWriter(new FileWriter(file));
+							    writer2.write(xml);
+							    writer2.close();
+								System.out.println("Saved: " + file.getPath()+".script");
+							}
+						}catch(Exception e) {
+							e.printStackTrace();
+						}
+					}catch(Exception e) {
+						e.printStackTrace();
+					}
+				}
+			}
+		}
 	}
 
 }

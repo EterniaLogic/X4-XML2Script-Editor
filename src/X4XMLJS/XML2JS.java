@@ -2,7 +2,6 @@ package X4XMLJS;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.LinkedList;
 import java.util.List;
 
 import javax.swing.text.html.parser.AttributeList;
@@ -16,7 +15,6 @@ import javax.xml.validation.Validator;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
-import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 
 public class XML2JS {
@@ -53,8 +51,8 @@ public class XML2JS {
 			
 			
 			// loop through parameters for root
-			
-			text += root.getNodeName()+" "+getAttrValue(root,"name")+"{ // {"+strAttrs(root)+"}";
+			String[] v = Utils.strAttrs(root,true);
+			text += root.getNodeName()+" "+Utils.getAttrValue(root,"name")+"{ // "+v[1]+"{"+v[0]+"}";
 			
 			text += "\n";
 			
@@ -82,8 +80,8 @@ public class XML2JS {
 	public String processInnerJS(Node root) {
 		String text="";
 		// inner elements
-		for(Node child : getChildren(root)) {
-			if(child.getNodeName().equals("#comment")) text += toTab(1)+handleComment(child.getNodeValue(),1);
+		for(Node child : Utils.getChildren(root)) {
+			if(child.getNodeName().equals("#comment")) text += Utils.toTab(1)+Utils.handleComment(child.getNodeValue(),1);
 			
 			// aiscripts
 			if(child.getNodeName().equals("order")) {
@@ -95,15 +93,15 @@ public class XML2JS {
 			}else if(child.getNodeName().equals("interrupts")) {
 				text += processInterrupts(child,1)+"\n";
 			}else if(child.getNodeName().equals("init")) {
-				text += toTab(1)+"function init(){\n";
+				text += Utils.toTab(1)+"function init(){\n";
 					text += handleActions(child,2);
-				text += toTab(1)+"}\n";
+				text += Utils.toTab(1)+"}\n";
 			}else if(child.getNodeName().equals("attention")) {
 				text += processAttention(child,1)+"\n";
 			}else if(child.getNodeName().equals("on_abort")) {
-				text += toTab(1)+"function on_abort(){\n";
+				text += Utils.toTab(1)+"function on_abort(){\n";
 				text += handleActions(child,2);
-				text += toTab(1)+"}\n";
+				text += Utils.toTab(1)+"}\n";
 				
 			// mdscripts
 			}else if(child.getNodeName().equals("cues")) {
@@ -118,27 +116,27 @@ public class XML2JS {
 	
 	// Process <order > tag
 	private String processOrder(Node child, int tabulation) {
-		String text = toTab(tabulation)+"order("+strAttrsOnly(child)+"){"+strAttrsComment(child)+"\n";
+		String text = Utils.toTab(tabulation)+"order("+Utils.strAttrsValOnly(child)+"){"+Utils.strAttrsComment(child)+"\n";
 		
-		for(Node child2 : getChildren(child)) {
-			if(child2.getNodeName().equals("#comment")) text += toTab(tabulation)+handleComment(child2.getNodeValue(),tabulation);
+		for(Node child2 : Utils.getChildren(child)) {
+			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation);
 			
 			if(child2.getNodeName().equals("params")) {
 				text += processParams(child2,tabulation+1);
 			}else if(child2.getNodeName().equals("skill")) {
-				text += toTab(tabulation+1)+"skill("+strAttrsOnly(child2)+");"+strAttrsComment(child2)+"\n"; //+"("+handleConds(child2)+")";
+				text += Utils.toTab(tabulation+1)+"skill("+Utils.strAttrsValOnly(child2)+");"+Utils.strAttrsComment(child2)+"\n"; //+"("+handleConds(child2)+")";
 			}
 		}
 		
-		return text+toTab(tabulation)+"}\n\n";
+		return text+Utils.toTab(tabulation)+"}\n\n";
 	}
 	
 	// Process basic parameters
 	private String processParams(Node child, int tabulation) {
 		String text="";
 		
-		for(Node child2 : getChildren(child)) {
-			if(child2.getNodeName().equals("#comment")) text += toTab(tabulation)+handleComment(child2.getNodeValue(),tabulation);
+		for(Node child2 : Utils.getChildren(child)) {
+			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation);
 			
 			if(child2.getNodeName().equals("param")) {
 				text = processParams_param(tabulation, text, child2);
@@ -150,15 +148,19 @@ public class XML2JS {
 
 	private String processParams_param(int tabulation, String text, Node child2) {
 		// single <param name="???" />
-		String name = getAttrValue(child2,"name");
-		String type = getAttrValue(child2,"type").equals("") ? "" : getAttrValue(child2,"type")+" ";
+		String name = Utils.getAttrValue(child2,"name");
+		String type = Utils.getAttrValue(child2,"type").equals("") ? "" : Utils.getAttrValue(child2,"type")+" ";
 		//String value = getAttrValue(child2,"value");
-		List<Node> attrs = getAttrs(child2);
+		List<Node> attrs = Utils.getAttrs(child2);
 		String paramnamescomment="";
 		String paramvals="";
+		String paramcom="";
+		String comment="";
 		
 		for(Node n : attrs) {
-			if(!n.getNodeName().equals("name") && !n.getNodeName().equals("type")) {
+			if(n.getNodeName().equals("comment")) {
+				comment = n.getNodeValue()+" ";
+			}else if(!n.getNodeName().equals("name") && !n.getNodeName().equals("type")) {
 				paramnamescomment += n.getNodeName()+", ";
 				paramvals += "\""+n.getNodeValue()+"\", ";
 			}
@@ -169,18 +171,22 @@ public class XML2JS {
 		if(paramnamescomment.length() > 2) paramvals=paramvals.substring(0, paramvals.length()-2);
 		
 		//if(!value.equals("")) paramnamescomment+="value";
-		if(paramnamescomment.length() > 0) paramnamescomment=" // {"+paramnamescomment+"}";
+		if(paramnamescomment.length() > 0) paramcom=" // "+comment+"{"+paramnamescomment+"}";
+		if(paramcom.length()==0 && comment.length()>0) paramcom = " // "+comment; 
 		
 		
 		
 		if(child2.hasChildNodes()) {
-			text += toTab(tabulation)+"param "+type+name+"("+paramvals+"){"+paramnamescomment+"\n";
-			for(Node n : getChildren(child2)) {
-				text += toTab(tabulation+1)+n.getNodeName()+" "+getAttrValue(n,"name")+" = \""+getAttrValue(n,"value")+"\";\n";
+			// handle... input_param nodes
+			text += Utils.toTab(tabulation)+"param "+type+name+"("+paramvals+"){"+paramcom+"\n";
+			for(Node n : Utils.getChildren(child2)) {
+				String c = "";
+				if(!Utils.getAttrValue(n,"comment").equals("")) c = " // "+Utils.getAttrValue(n,"comment"); 
+				text += Utils.toTab(tabulation+1)+n.getNodeName()+" "+Utils.getAttrValue(n,"name")+" = \""+Utils.getAttrValue(n,"value")+"\";"+c+"\n";
 			}
-			text += toTab(tabulation)+"}\n";
+			text += Utils.toTab(tabulation)+"}\n";
 		}else {
-			text += toTab(tabulation)+"param "+type+name+"("+paramvals+");"+paramnamescomment+"\n";
+			text += Utils.toTab(tabulation)+"param "+type+name+"("+paramvals+");"+paramcom+"\n";
 		}
 		
 		System.out.println("PRPCESS PARAM: "+name);
@@ -192,16 +198,16 @@ public class XML2JS {
 	private String processInterrupts(Node child, int tabulation) {
 		String text="";
 		
-		for(Node child2 : getChildren(child)) {
-			if(child2.getNodeName().equals("#comment")) text += toTab(tabulation)+handleComment(child2.getNodeValue(),tabulation);
+		for(Node child2 : Utils.getChildren(child)) {
+			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation);
 			
 			if(child2.getNodeName().equals("handler")) {
 				if(child2.getChildNodes().getLength() > 0) {
 					String conds = "";
 					String actions = "";
 					// handler <conditions> or <actions>
-					for(Node child3 : getChildren(child2)) {
-						if(child3.getNodeName().equals("#comment")) text += toTab(tabulation)+handleComment(child3.getNodeValue(),tabulation);
+					for(Node child3 : Utils.getChildren(child2)) {
+						if(child3.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child3.getNodeValue(),tabulation);
 						//System.out.println("interrupt handler - "+child3.getNodeName());
 						
 						if(child3.getNodeName().equals("conditions")) {
@@ -218,16 +224,20 @@ public class XML2JS {
 						}
 					}
 					
-					if(!getAttrValue(child,"comment").equals(""))
-						text += "// "+handleComment(getAttrValue(child,"comment"),tabulation)+"\n";
+					String comment = Utils.getAttrValue(child,"comment");
+					
+					if(!Utils.getAttrValue(child,"comment").equals(""))
+						text += "// "+Utils.handleComment(comment,tabulation)+"\n";
 					if(conds.equals("")) conds="TRUE";
-					text += toTab(tabulation)+"#interrupt_handler_if("+conds+"){\n"+actions+"\n"+toTab(tabulation)+"};\n";
+					text += Utils.toTab(tabulation)+"#interrupt_handler_if("+conds+"){"+comment+"\n"+actions+"\n"+Utils.toTab(tabulation)+"};\n";
 				}else {
-					String ref=getAttrValue(child2,"ref");
+					String[] atcomment = Utils.strAttrs(child2,true);
+					String ref=Utils.getAttrValue(child2,"ref");
 					if(!ref.equals("")) {
-						text += toTab(tabulation)+"#interrupt_handler_ref("+ref+");\n";
+						String comment = !atcomment[1].equals("") ? " // "+atcomment[1] : "";
+						text += Utils.toTab(tabulation)+"#interrupt_handler_ref("+ref+");"+comment+"\n";
 					}else {
-						text += toTab(tabulation)+"#interrupt_handler ?; // {"+strAttrs(child2)+"}\n";
+						text += Utils.toTab(tabulation)+"#interrupt_handler ?; // "+atcomment[1]+"{"+atcomment[0]+"}\n";
 					}
 				}
 			}
@@ -241,24 +251,27 @@ public class XML2JS {
 		String text="";
 		
 		//System.out.println(child.getNodeName());
-		List<Node> list = getChildren(child);
+		List<Node> list = Utils.getChildren(child);
 		for(Node child2 : list) {
 			String com="";
-			if(child2.getNodeName().equals("#comment")) text += toTab(1)+handleComment(child2.getNodeValue(),1);
+			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(1)+Utils.handleComment(child2.getNodeValue(),1);
 			else {
 				if(child2.hasChildNodes()) {
 					text += child2.getNodeName()+"("+handleConds(child2,false)+")";
 				}else if(child2.getNodeName().equals("check_value")){
-					text += getAttrValue(child2,"value");
+					text += Utils.getAttrValue(child2,"value");
+					if(!Utils.getAttrValue(child2, "comment").equals("")) 
+						text += " /* "+Utils.getAttrValue(child2, "comment")+" */";
 				}else {
-					text += child2.getNodeName()+"("+strAttrs(child2)+")";
+					String[] atcomment = Utils.strAttrs(child2,false);
+					text += child2.getNodeName()+"("+atcomment[0]+")";
 				}
 				
 				if(list.get(list.size()-1) != child2) {
 					text += " && ";
 					if(topmost) { 
 						if(!com.equals("")) text += com;
-						text += "\n"+toTab(7);
+						text += "\n"+Utils.toTab(7);
 					}
 					
 				}
@@ -276,71 +289,75 @@ public class XML2JS {
 		
 		//if(child.getChildNodes().getLength() > 0) text += "\n";
 		
+		
 		//System.out.println(child.getNodeName());
 		boolean last_if=false;
 		// Standardized scripting language
-		List<Node> list = getChildren(child);
+		List<Node> list = Utils.getChildren(child);
 		for(Node child2 : list) {
-			if(child2.getNodeName().equals("#text")) continue;
-			if(last_if && !(child2.getNodeName().equals("do_else") || child2.getNodeName().equals("do_elseif"))) text += "\n";
+			String nodeName = child2.getNodeName();
+			if(nodeName.equals("#text")) continue;
+			if(last_if && !(nodeName.equals("do_else") || nodeName.equals("do_elseif"))) text += "\n";
+			String comment = Utils.getAttrValue(child2, "comment");
+			String commentx = comment.length() > 0 ? " // "+comment : "";
 			
 			
 			// loops
-			if(child2.getNodeName().equals("do_if")) {
+			if(nodeName.equals("do_if")) {
 				// pre-space it out   getTabs(tabulation)+"\n"+
-				text += toTab(tabulation)+"if("+getAttrValue(child2,"value")+"){\n";
+				text += Utils.toTab(tabulation)+"if("+Utils.getAttrValue(child2,"value")+"){"+commentx+"\n";
 				text += handleActions(child2,tabulation+1);
-				text += toTab(tabulation)+"}";
+				text += Utils.toTab(tabulation)+"}";// errors sometimes!
 				last_if=true;
-			}else if(child2.getNodeName().equals("do_elseif")) {
-				if(!last_if) text += toTab(tabulation);
-				text += "else if("+getAttrValue(child2,"value")+"){\n";
+			}else if(nodeName.equals("do_elseif")) {
+				if(!last_if) text += Utils.toTab(tabulation);
+				text += "else if("+Utils.getAttrValue(child2,"value")+"){"+commentx+"\n";
 				text += handleActions(child2,tabulation+1);
-				text += toTab(tabulation)+"}";
+				text += Utils.toTab(tabulation)+"}"; // errors sometimes!
 				last_if=true;
-			}else if(child2.getNodeName().equals("param")) {// <param name="?" value=""
+			}else if(nodeName.equals("param")) {// <param name="?" value=""
 				text += processParams_param(tabulation, "", child2);
-			}else if(child2.getNodeName().equals("do_else")) { // keeps on messing up?
-				if(!last_if) text += toTab(tabulation);
-				text += "else{\n";
+			}else if(nodeName.equals("do_else")) { // keeps on messing up?
+				if(!last_if) text += Utils.toTab(tabulation);
+				text += "else{"+commentx+"\n";
 				text += handleActions(child2,tabulation+1);
-				text += toTab(tabulation)+"}\n";
-			}else if(child2.getNodeName().equals("do_while")) {
-				text += toTab(tabulation)+"while("+getAttrValue(child2,"value")+"){\n";
+				text += Utils.toTab(tabulation)+"}\n";
+			}else if(nodeName.equals("do_while")) {
+				text += Utils.toTab(tabulation)+"while("+Utils.getAttrValue(child2,"value")+"){"+commentx+"\n";
 				text += handleActions(child2,tabulation+1);
-				text += toTab(tabulation)+"}\n";
-			}else if(child2.getNodeName().equals("do_any")) { // uh... ok
-				text += toTab(tabulation)+"any{\n";
+				text += Utils.toTab(tabulation)+"}\n";
+			}else if(nodeName.equals("do_any")) { // uh... ok
+				text += Utils.toTab(tabulation)+"any{"+commentx+"\n";
 				text += handleActions(child2,tabulation+1);
-				text += toTab(tabulation)+"}\n";
-			}else if(child2.getNodeName().equals("interrupt")) {
+				text += Utils.toTab(tabulation)+"}\n";
+			}else if(nodeName.equals("interrupt")) {
 				processInterrupts(child2,tabulation);
-			}else if(child2.getNodeName().equals("set_value")) {
-				if(getAttrValue(child2,"exact").equals("") && getAttrValue(child2,"exact").equals("")) {
-					text += toTab(tabulation)+"create "+getAttrValue(child2,"name")+";\n";
+			}else if(nodeName.equals("set_value")) {
+				if(Utils.getAttrValue(child2,"exact").equals("") && Utils.getAttrValue(child2,"exact").equals("")) {
+					text += Utils.toTab(tabulation)+"create "+Utils.getAttrValue(child2,"name")+";"+commentx+"\n";
 				}else {
-					text += toTab(tabulation)+getAttrValue(child2,"name")+" = "+getAttrValue(child2,"exact")+";\n";
+					text += Utils.toTab(tabulation)+Utils.getAttrValue(child2,"name")+" = "+Utils.getAttrValue(child2,"exact")+";"+commentx+"\n";
 				}
-			}else if(child2.getNodeName().equals("remove_value")) {
-				text += toTab(tabulation)+"delete "+getAttrValue(child2,"name")+";\n";
-			}else if(child2.getNodeName().equals("run_script")) { // Script?
-				text += toTab(tabulation)+"run_script("+getAttrValue(child2,"name")+"){\n";
+			}else if(nodeName.equals("remove_value")) {
+				text += Utils.toTab(tabulation)+"delete "+Utils.getAttrValue(child2,"name")+";"+commentx+"\n";
+			}else if(nodeName.equals("run_script")) { // Script?
+				text += Utils.toTab(tabulation)+"run_script "+Utils.getAttrValue(child2,"name")+"{"+commentx+"\n";
 				text += handleActions(child2,tabulation+1);
-				text += toTab(tabulation)+"}\n";
-			}else if(child2.getNodeName().equals("#comment")) { 
-				text += toTab(tabulation)+"\n"+handleComment(child2.getNodeValue(),tabulation)+"\n";
+				text += Utils.toTab(tabulation)+"}\n";
+			}else if(nodeName.equals("#comment")) { 
+				text += Utils.toTab(tabulation)+"\n"+Utils.handleComment(child2.getNodeValue(),tabulation)+"\n";
 			}else{
 				if(child2.hasChildNodes()) {
-					text += toTab(tabulation)+child2.getNodeName()+"("+strAttrsOnly(child2)+"){"+strAttrsComment(child2)+"\n";
+					text += Utils.toTab(tabulation)+nodeName+"("+Utils.strAttrsValOnly(child2)+"){"+Utils.strAttrsComment(child2)+"\n";
 					text += handleActions(child2,tabulation+1);
-					text += toTab(tabulation)+"}\n";
+					text += Utils.toTab(tabulation)+"}\n";
 				}else {
-					text += toTab(tabulation)+child2.getNodeName()+"("+strAttrsOnly(child2)+");"+strAttrsComment(child2)+"\n"; //+"("+handleConds(child2)+")";
+					text += Utils.toTab(tabulation)+nodeName+"("+Utils.strAttrsValOnly(child2)+");"+Utils.strAttrsComment(child2)+"\n"; //+"("+handleConds(child2)+")";
 				}
 			}
 			
-			if(!child2.getNodeName().equals("do_if")) last_if=false;
-			if(list.get(list.size()-1) == child2 && child2.getNodeName().equals("do_if"))	text += "\n";
+			if(!nodeName.equals("do_if")) last_if=false;
+			if(list.get(list.size()-1) == child2 && nodeName.equals("do_if"))	text += "\n";
 		}
 		
 		//if(!text.equals("")) text += getTabs(tabulation-1);
@@ -352,144 +369,16 @@ public class XML2JS {
 	private String processAttention(Node child, int tabulation) {
 		String text="";
 		
-		text += toTab(tabulation)+"function attention("+getAttrValue(child,"min")+"){\n";
+		text += Utils.toTab(tabulation)+"function attention("+Utils.getAttrValue(child,"min")+"){\n";
 		
-		for(Node child2 : getChildren(child)) {
-			if(child2.getNodeName().equals("#comment")) text += toTab(tabulation)+handleComment(child2.getNodeValue(),tabulation);
+		for(Node child2 : Utils.getChildren(child)) {
+			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation);
 			if(child2.getNodeName().equals("actions")) {
 				text += handleActions(child2, tabulation+1);
 			}
 		}
-		text += toTab(tabulation)+"}\n";
+		text += Utils.toTab(tabulation)+"}\n";
 		
 		return text;
-	}
-	
-	
-	
-	
-	
-	
-	
-// HELPERS
-	private String getAttrValue(Node child, String attrname) {
-		NamedNodeMap m = child.getAttributes();
-		String name="";
-		String def="";
-		
-		// parameters for node
-		for(Node n : getAttrs(child)) {
-			if(n.getNodeName().equals(attrname)) {
-				return n.getNodeValue();
-			}
-		}
-		
-		return "";
-	}
-	
-	
-	// Print attributes with a space between
-	private String handleComment(String com, int tabs) {
-		if(com.contains("\n")) {
-			String[] lines = com.split("\n");
-			String text=toTab(tabs)+"/* "+lines[0]+"\n";
-			
-			for(int i=1;i<lines.length;i++) {
-				text += toTab(tabs+1)+lines[i]+"\n";
-			}
-			
-			return text+toTab(tabs)+" */";
-		}else return toTab(tabs)+"// "+com+"";
-	}
-	
-	private String strAttrs(Node node) {
-		String t = "";
-		
-		if(node.getNodeName().equals("#text")) return "";
-		if(node == null) return "";
-		
-		
-		NamedNodeMap m = node.getAttributes();
-		for(int i=0;i<m.getLength();i++) {
-			Node n = m.item(i);
-			t += n.getNodeName()+"=\""+n.getNodeValue()+"\"";
-			if(i < m.getLength()-1) t += ", ";
-		}
-		
-		return t;
-	}
-	
-	private String strAttrsOnly(Node node) {
-		String t = "";
-		
-		if(node.getNodeName().equals("#text")) return "";
-		if(node == null) return "";
-		
-		
-		NamedNodeMap m = node.getAttributes();
-		for(int i=0;i<m.getLength();i++) {
-			Node n = m.item(i);
-			t += "\""+n.getNodeValue()+"\"";
-			if(i < m.getLength()-1) t += ", ";
-		}
-		
-		return t;
-	}
-	
-	private String strAttrsComment(Node node) {
-		String t = "";
-		
-		if(node.getNodeName().equals("#text")) return "";
-		if(node == null) return "";
-		
-		
-		NamedNodeMap m = node.getAttributes();
-		for(int i=0;i<m.getLength();i++) {
-			Node n = m.item(i);
-			t += n.getNodeName();
-			if(i < m.getLength()-1) t += ", ";
-		}
-		
-		if(t.length() > 0) t=" // {"+t+"}";
-		
-		return t;
-	}
-	
-	public static String toTab(int tabulation) {
-		String text="";
-		for(int i=0;i<tabulation;i++) text += "    ";
-		return text;
-	}
-	
-	private List<Node> getAttrs(Node node){
-		LinkedList<Node> list = new LinkedList<Node>();
-		if(node.getNodeName().equals("#text")) return list;
-		if(node == null) return list;
-		
-		
-		NamedNodeMap m = node.getAttributes();
-		for(int i=0;i<m.getLength();i++) {
-			list.add(m.item(i));
-		}
-		
-		return list;
-	}
-	
-	private List<Node> getChildren(Node n){
-		LinkedList<Node> list = new LinkedList<Node>();
-		
-		for(int j=0;j<n.getChildNodes().getLength();j++) {
-			Node child = n.getChildNodes().item(j);
-			if(child.getNodeName().equals("#text")) continue;
-			
-			list.add(child);
-			
-				
-			/*if(child.getNodeName().equals("#comment")){
-				// list.add(handleComment(child.getNodeValue()));
-			}else {}*/
-		}
-		
-		return list;
 	}
 }
