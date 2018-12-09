@@ -50,26 +50,30 @@ class PreXMLNode{
 		
 			t += Utils.toTab(tab)+"<"+toXMLName();
 			
-			
+			boolean multicloseoff = children.size() > 0 
+					|| toXMLName().equals("do_if") || toXMLName().equals("do_else") // programmer error with a loop that has not content
+					|| toXMLName().equals("do_elseif") || toXMLName().equals("do_any") || toXMLName().equals("do_while");
 			
 			
 			List<PreXMLNode> elist = new LinkedList<PreXMLNode>();
 			for(PreXMLNode n : attributes.values()) elist.add(n);
 			
 			List<PreXMLNode> attrlist = new LinkedList<PreXMLNode>();
-			String[] preflist = {"id","name", "value", "object", "type", "dock"};
+			
+			// listing methods to sort attribute tags by type
+			String[] preflist = {"id","name", "exact", "order", "param", "value", "object", "type", "dock", "text", "chance", "class", "space", "commandaction"};
 			
 			// run attributes first and sort the 'preferred' attributes to be first
 			for(String nam : preflist) {
 				for(PreXMLNode n : attributes.values()) {
 					if(n.name.equals(nam)) {
+						attrlist.add(n);
 						for(int i=0;i<elist.size();i++) {
 							if(elist.get(i).name.equals(nam)) {
 								elist.remove(i);
 								break;
 							}
 						}
-						attrlist.add(n);
 					}
 				}
 			}
@@ -84,7 +88,7 @@ class PreXMLNode{
 				t+=" "+n.name+"=\""+n.value+"\"";
 			}
 			
-			if(children.size() == 0)
+			if(!multicloseoff)
 				t += " />\n";
 			else t+= ">\n";
 			
@@ -94,7 +98,7 @@ class PreXMLNode{
 			}
 			
 			
-			if(children.size() > 0)
+			if(multicloseoff)
 				t += Utils.toTab(tab)+"</"+toXMLName()+">\n";
 		}
 		
@@ -108,6 +112,8 @@ class PreXMLNode{
 		else if(name.equals("else")) return "do_else";
 		else if(name.equals("elseif")) return "do_elseif";
 		else if(name.equals("interrupt_handler_if")) return "handler";
+		else if(name.equals("interrupt_if")) return "interrupt";
+		else if(name.equals("interrupt_ref")) return "interrupt";
 		
 		return name;
 	}
@@ -138,9 +144,10 @@ class PreXMLNode{
 		if(this.children.contains(child)) return; // prevent duplicates
 		else if(actns != null && actns.getChildren().contains(child)) return;
 		
-		if((name.equals("attention") || name.equals("interrupt_handler_if")) && !child.name.equals("actions")) {
+		if((name.equals("attention") || name.equals("interrupt_handler_if") || name.equals("interrupt_if"))
+				&& !child.name.equals("actions")) {
 			
-			if(name.equals("interrupt_handler_if"))
+			if(name.equals("interrupt_handler_if") || name.equals("interrupt_if"))
 				System.out.println("add interrupt child: "+child.name);
 			
 			// conditions is a base node, otherwise add to actions
@@ -178,5 +185,22 @@ class PreXMLNode{
 		PreXMLNode namen = new PreXMLNode(name);
 		namen.value = value;
 		this.attributes.put(name, namen);
+	}
+	
+	public void addAttrsFromParams(String params, String splitter) {
+		if(params.contains(splitter)) {
+			for(String s : params.split(splitter)) {
+				addAttrFromParam(s);
+			}
+		}else {
+			addAttrFromParam(params);
+		}
+	}
+	
+	public void addAttrFromParam(String param) {
+		if(param.contains("=")) {
+			String[] t = param.split("=",2);
+			putAttrNode(t[0].trim(), t[1].replace("\"", ""));
+		}
 	}
 }

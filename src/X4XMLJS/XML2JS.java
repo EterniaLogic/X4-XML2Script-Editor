@@ -51,13 +51,22 @@ public class XML2JS {
 			
 			
 			// loop through parameters for root
-			String[] v = Utils.strAttrs(root,true);
+			String[] v = Utils.strAttrs(root,true,new String[] {"name"});
 			text += root.getNodeName()+" "+Utils.getAttrValue(root,"name")+"{ // "+v[1]+"{"+v[0]+"}";
 			
 			text += "\n";
 			
 			text += processInnerJS(root);
 			
+			// REGEX: prevent endbrackets on the same line
+			//text = text.replaceAll("$}}", "}\n}");
+			text = text.replaceAll("}([ ]+})", "}\n$1");// prevent }      }
+			text = text.replaceAll("}([ ]+else)", "}\n$1"); // prevent }     else{
+			text = text.replaceAll("}\n[ ]+(else)", "}$1");
+			text = text.replaceAll("}([ ]+[^e].*)", "}\n$1");
+			
+			for(int i=0;i<20;i++) // remove excessive spaces within statements
+				text = text.replaceAll("(\n\\s{2,})(([^ \n]+ )+)(\\s{4,})", "$1$2");
 			
 			text += "\n}";
 			
@@ -77,11 +86,13 @@ public class XML2JS {
 		return true; // return false if the js cannot validate XML
 	}
 	
+	
+	
 	public String processInnerJS(Node root) {
 		String text="";
 		// inner elements
 		for(Node child : Utils.getChildren(root)) {
-			if(child.getNodeName().equals("#comment")) text += Utils.toTab(1)+Utils.handleComment(child.getNodeValue(),1);
+			if(child.getNodeName().equals("#comment")) text += Utils.toTab(1)+Utils.handleComment(child.getNodeValue(),1,false);
 			
 			// aiscripts
 			if(child.getNodeName().equals("order")) {
@@ -104,7 +115,7 @@ public class XML2JS {
 				text += Utils.toTab(1)+"}\n";
 				
 			// mdscripts
-			}else if(child.getNodeName().equals("cues")) {
+			}else if(child.getNodeName().equals("cues")) { // md script cue
 				
 			}else if(child.getNodeName().equals("library")) { // Libraries act kind of like functions that are referenced in the cues (via <include_actions ref="BoardShip__Standard_FindMilitaryTarget"/>)
 				
@@ -119,7 +130,7 @@ public class XML2JS {
 		String text = Utils.toTab(tabulation)+"order("+Utils.strAttrsValOnly(child)+"){"+Utils.strAttrsComment(child)+"\n";
 		
 		for(Node child2 : Utils.getChildren(child)) {
-			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation);
+			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation,false);
 			
 			if(child2.getNodeName().equals("params")) {
 				text += processParams(child2,tabulation+1);
@@ -136,7 +147,7 @@ public class XML2JS {
 		String text="";
 		
 		for(Node child2 : Utils.getChildren(child)) {
-			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation);
+			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation,false);
 			
 			if(child2.getNodeName().equals("param")) {
 				text = processParams_param(tabulation, text, child2);
@@ -198,51 +209,72 @@ public class XML2JS {
 	private String processInterrupts(Node child, int tabulation) {
 		String text="";
 		
-		for(Node child2 : Utils.getChildren(child)) {
-			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation);
-			
-			if(child2.getNodeName().equals("handler")) {
-				if(child2.getChildNodes().getLength() > 0) {
-					String conds = "";
-					String actions = "";
-					// handler <conditions> or <actions>
-					for(Node child3 : Utils.getChildren(child2)) {
-						if(child3.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child3.getNodeValue(),tabulation);
-						//System.out.println("interrupt handler - "+child3.getNodeName());
-						
-						if(child3.getNodeName().equals("conditions")) {
-							System.out.println("conds");
-							String c = handleConds(child3,true);
-							if(!c.equals("")) {
-								conds += c;
-							}
-						}else if(child3.getNodeName().equals("actions")) {
-							String c = handleActions(child3,tabulation+1);
-							if(!c.equals("")) {
-								actions += c;
-							}
-						}
-					}
-					
-					String comment = Utils.getAttrValue(child,"comment");
-					
-					if(!Utils.getAttrValue(child,"comment").equals(""))
-						text += "// "+Utils.handleComment(comment,tabulation)+"\n";
-					if(conds.equals("")) conds="TRUE";
-					text += Utils.toTab(tabulation)+"#interrupt_handler_if("+conds+"){"+comment+"\n"+actions+"\n"+Utils.toTab(tabulation)+"};\n";
-				}else {
-					String[] atcomment = Utils.strAttrs(child2,true);
-					String ref=Utils.getAttrValue(child2,"ref");
-					if(!ref.equals("")) {
-						String comment = !atcomment[1].equals("") ? " // "+atcomment[1] : "";
-						text += Utils.toTab(tabulation)+"#interrupt_handler_ref("+ref+");"+comment+"\n";
-					}else {
-						text += Utils.toTab(tabulation)+"#interrupt_handler ?; // "+atcomment[1]+"{"+atcomment[0]+"}\n";
-					}
+		// Standard layout
+		// <interrupts>
+		//	<handler ... />
+		//  <handler ...> <conditions></conditions> <actions></actions>  </handler>
+		// </interrupts>
+		
+		// Single interrupt inline with code
+		// <interrupt> <conditions></conditions> <actions></actions> </interrupt>
+		
+		if(child.getNodeName().equals("interrupt")) {
+			text = processSingleInterrupt(child.getParentNode(), tabulation, text, child, true);
+		}else {
+			for(Node child2 : Utils.getChildren(child)) {
+				if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation,false);
+				
+				if(child2.getNodeName().equals("handler")) {
+					text = processSingleInterrupt(child, tabulation, text, child2, false);
 				}
 			}
 		}
 		
+		return text;
+	}
+
+	private String processSingleInterrupt(Node parent, int tabulation, String text, Node child, boolean inline) {
+		if(child.getChildNodes().getLength() > 0) {
+			String conds = "";
+			String actions = "";
+			// handler <conditions> or <actions>
+			for(Node child2 : Utils.getChildren(child)) {
+				if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation,false);
+				//System.out.println("interrupt handler - "+child3.getNodeName());
+				
+				if(child2.getNodeName().equals("conditions")) {
+					System.out.println("conds");
+					String c = handleConds(child2,true);
+					if(!c.equals("")) {
+						conds += c;
+					}
+				}else if(child2.getNodeName().equals("actions")) {
+					String c = handleActions(child2,tabulation+1);
+					if(!c.equals("")) {
+						actions += c;
+					}
+				}
+			}
+			
+			String comment = Utils.getAttrValue(parent,"comment");
+			
+			if(!Utils.getAttrValue(parent,"comment").equals(""))
+				text += "// "+Utils.handleComment(comment,tabulation,false)+"\n";
+			if(conds.equals("")) conds="TRUE";
+			if(inline) 	text += Utils.toTab(tabulation)+"#interrupt_if("+conds+"){"+comment+"\n"+actions+"\n"+Utils.toTab(tabulation)+"};\n";
+			else 		text += Utils.toTab(tabulation)+"#interrupt_handler_if("+conds+"){"+comment+"\n"+actions+"\n"+Utils.toTab(tabulation)+"};\n";
+		}else {
+			String[] atcomment = Utils.strAttrs(child,true,new String[] {"ref"});
+			String ref=Utils.getAttrValue(child,"ref");
+			if(!ref.equals("")) {
+				String comment = !atcomment[1].equals("") ? " // "+atcomment[1] : "";
+				if(inline) 	text += Utils.toTab(tabulation)+"#interrupt_ref("+ref+");"+comment+"\n";
+				else		text += Utils.toTab(tabulation)+"#interrupt_handler_ref("+ref+");"+comment+"\n";
+			}else {
+				if(inline) 	text += Utils.toTab(tabulation)+"#interrupt_ ?; // "+atcomment[1]+"{"+atcomment[0]+"}\n";
+				else		text += Utils.toTab(tabulation)+"#interrupt_handler ?; // "+atcomment[1]+"{"+atcomment[0]+"}\n";
+			}
+		}
 		return text;
 	}
 	
@@ -254,7 +286,7 @@ public class XML2JS {
 		List<Node> list = Utils.getChildren(child);
 		for(Node child2 : list) {
 			String com="";
-			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(1)+Utils.handleComment(child2.getNodeValue(),1);
+			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(1)+Utils.handleComment(child2.getNodeValue(),1,true);
 			else {
 				if(child2.hasChildNodes()) {
 					text += child2.getNodeName()+"("+handleConds(child2,false)+")";
@@ -263,7 +295,7 @@ public class XML2JS {
 					if(!Utils.getAttrValue(child2, "comment").equals("")) 
 						text += " /* "+Utils.getAttrValue(child2, "comment")+" */";
 				}else {
-					String[] atcomment = Utils.strAttrs(child2,false);
+					String[] atcomment = Utils.strAttrs(child2,false,null);
 					text += child2.getNodeName()+"("+atcomment[0]+")";
 				}
 				
@@ -301,17 +333,22 @@ public class XML2JS {
 			String comment = Utils.getAttrValue(child2, "comment");
 			String commentx = comment.length() > 0 ? " // "+comment : "";
 			
+			// "+Utils.strAttrsComment(child2)+"
+			
+			
 			
 			// loops
 			if(nodeName.equals("do_if")) {
 				// pre-space it out   getTabs(tabulation)+"\n"+
-				text += Utils.toTab(tabulation)+"if("+Utils.getAttrValue(child2,"value")+"){"+commentx+"\n";
+				String s = Utils.strAttrs_tocomment(child2,true,new String[] {"value"});
+				text += Utils.toTab(tabulation)+"if("+Utils.getAttrValue(child2,"value")+"){"+s+"\n";
 				text += handleActions(child2,tabulation+1);
 				text += Utils.toTab(tabulation)+"}";// errors sometimes!
 				last_if=true;
 			}else if(nodeName.equals("do_elseif")) {
 				if(!last_if) text += Utils.toTab(tabulation);
-				text += "else if("+Utils.getAttrValue(child2,"value")+"){"+commentx+"\n";
+				String s = Utils.strAttrs_tocomment(child2,true,new String[] {"value"});
+				text += "else if("+Utils.getAttrValue(child2,"value")+"){"+s+"\n";
 				text += handleActions(child2,tabulation+1);
 				text += Utils.toTab(tabulation)+"}"; // errors sometimes!
 				last_if=true;
@@ -319,38 +356,50 @@ public class XML2JS {
 				text += processParams_param(tabulation, "", child2);
 			}else if(nodeName.equals("do_else")) { // keeps on messing up?
 				if(!last_if) text += Utils.toTab(tabulation);
-				text += "else{"+commentx+"\n";
+				String s = Utils.strAttrs_tocomment(child2,true,null);
+				text += "else{"+s+"\n";
 				text += handleActions(child2,tabulation+1);
 				text += Utils.toTab(tabulation)+"}\n";
 			}else if(nodeName.equals("do_while")) {
-				text += Utils.toTab(tabulation)+"while("+Utils.getAttrValue(child2,"value")+"){"+commentx+"\n";
+				String s = Utils.strAttrs_tocomment(child2,true,new String[] {"value"});
+				text += Utils.toTab(tabulation)+"while("+Utils.getAttrValue(child2,"value")+"){"+s+"\n";
 				text += handleActions(child2,tabulation+1);
 				text += Utils.toTab(tabulation)+"}\n";
 			}else if(nodeName.equals("do_any")) { // uh... ok
-				text += Utils.toTab(tabulation)+"any{"+commentx+"\n";
+				String s = Utils.strAttrs_tocomment(child2,true,null);
+				text += Utils.toTab(tabulation)+"any{"+s+"\n";
 				text += handleActions(child2,tabulation+1);
 				text += Utils.toTab(tabulation)+"}\n";
 			}else if(nodeName.equals("interrupt")) {
-				processInterrupts(child2,tabulation);
+				text += processInterrupts(child2,tabulation);
+			}else if(nodeName.equals("interrupts")) {
+				//text += processInterrupts(child2,tabulation);
 			}else if(nodeName.equals("set_value")) {
+				
 				if(Utils.getAttrValue(child2,"exact").equals("") && Utils.getAttrValue(child2,"exact").equals("")) {
-					text += Utils.toTab(tabulation)+"create "+Utils.getAttrValue(child2,"name")+";"+commentx+"\n";
+					String s = Utils.strAttrs_tocomment(child2,true,new String[] {"name"});
+					text += Utils.toTab(tabulation)+"create "+Utils.getAttrValue(child2,"name")+";"+s+"\n";
 				}else {
-					text += Utils.toTab(tabulation)+Utils.getAttrValue(child2,"name")+" = "+Utils.getAttrValue(child2,"exact")+";"+commentx+"\n";
+					String s = Utils.strAttrs_tocomment(child2,true,new String[] {"name","exact"});
+					text += Utils.toTab(tabulation)+Utils.getAttrValue(child2,"name")+" = "+Utils.getAttrValue(child2,"exact")+";"+s+"\n";
 				}
 			}else if(nodeName.equals("remove_value")) {
-				text += Utils.toTab(tabulation)+"delete "+Utils.getAttrValue(child2,"name")+";"+commentx+"\n";
+				String s = Utils.strAttrs_tocomment(child2,true,new String[] {"name"});
+				text += Utils.toTab(tabulation)+"delete "+Utils.getAttrValue(child2,"name")+";"+s+"\n";
 			}else if(nodeName.equals("run_script")) { // Script?
-				text += Utils.toTab(tabulation)+"run_script "+Utils.getAttrValue(child2,"name")+"{"+commentx+"\n";
+				String s = Utils.strAttrs_tocomment(child2,true,new String[] {"name"});
+				text += Utils.toTab(tabulation)+"run_script "+Utils.getAttrValue(child2,"name")+"{"+s+"\n";
 				text += handleActions(child2,tabulation+1);
 				text += Utils.toTab(tabulation)+"}\n";
 			}else if(nodeName.equals("#comment")) { 
-				text += Utils.toTab(tabulation)+"\n"+Utils.handleComment(child2.getNodeValue(),tabulation)+"\n";
+				text += Utils.toTab(tabulation)+"\n"+Utils.handleComment(child2.getNodeValue(),tabulation,false)+"\n";
 			}else{
 				if(child2.hasChildNodes()) {
 					text += Utils.toTab(tabulation)+nodeName+"("+Utils.strAttrsValOnly(child2)+"){"+Utils.strAttrsComment(child2)+"\n";
 					text += handleActions(child2,tabulation+1);
 					text += Utils.toTab(tabulation)+"}\n";
+				}else if(nodeName.equals("break") || nodeName.equals("return") || nodeName.equals("continue")) {
+					text += Utils.toTab(tabulation)+nodeName+";"+Utils.strAttrs_tocomment(child2,false,null)+"\n"; //+"("+handleConds(child2)+")";
 				}else {
 					text += Utils.toTab(tabulation)+nodeName+"("+Utils.strAttrsValOnly(child2)+");"+Utils.strAttrsComment(child2)+"\n"; //+"("+handleConds(child2)+")";
 				}
@@ -372,7 +421,7 @@ public class XML2JS {
 		text += Utils.toTab(tabulation)+"function attention("+Utils.getAttrValue(child,"min")+"){\n";
 		
 		for(Node child2 : Utils.getChildren(child)) {
-			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation);
+			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation,false);
 			if(child2.getNodeName().equals("actions")) {
 				text += handleActions(child2, tabulation+1);
 			}

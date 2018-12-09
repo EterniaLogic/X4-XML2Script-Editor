@@ -31,8 +31,12 @@ public class PreXMLNodeFactory {
 		}else if(text.contains("input_param")) { // varname=b;
 			node = toPreXMLNode_inputparam(text);
 		}else if(text.startsWith("#interrupt_handler_ref")) { // {default}
-			node = toPreXMLNode_interrupt_ref(text);
+			node = toPreXMLNode_interrupt_handler_ref(text);
 		}else if(text.startsWith("#interrupt_handler_if")) { // #interrupt_handler_if(conds){}
+			node = toPreXMLNode_interrupt_handler_if(text,valuelist);
+		}else if(text.startsWith("#interrupt_ref")) { // {default} INLINE, not at the beginning of the file
+			node = toPreXMLNode_interrupt_ref(text);
+		}else if(text.startsWith("#interrupt_if")) { // INLINE, not at the beginning of the file
 			node = toPreXMLNode_interrupt_if(text,valuelist);
 		}else if(text.startsWith("create ")) { // create varname;
 			node = toPreXMLNode_create(text);
@@ -117,7 +121,7 @@ public class PreXMLNodeFactory {
 	private static PreXMLNode toPreXMLNode_create(String text) {
 		PreXMLNode node;
 		//System.out.println("toPreXMLNode setValue (create)");
-		String name = text.substring(8, text.lastIndexOf(";")).replace("\"", "");
+		String name = text.substring(7, text.lastIndexOf(";")).replace("\"", "");
 		
 		node = new PreXMLNode("set_value");
 		
@@ -263,7 +267,7 @@ public class PreXMLNodeFactory {
 	}
 
 	// #interrupt_handler_if(conditions){... actions }		=> <handler><conditions></conditions><actions></actions></handler>
-	private static PreXMLNode toPreXMLNode_interrupt_if(String text, List<String> valuelist) {
+	private static PreXMLNode toPreXMLNode_interrupt_handler_if(String text, List<String> valuelist) {
 		//System.out.println("toPreXMLNode #interrupt if");
 		
 		// #interrupt_handler_if(check_any(event_object_attacked(group="$localtargetgroup") && event_object_signalled(check="false", object="this.sector", param="'police'")) && set_value(exact="if (event.name == 'event_object_attacked') then event.param else event.param2", name="$attacker") && $police && this.sector.exists && $attacker.isoperational && $attacker.zone.policefaction && not this.hasrelation.enemy.{$attacker.zone.policefaction} && $attacker.owner != this.owner && $attacker.owner != event.param3.owner){
@@ -271,17 +275,39 @@ public class PreXMLNodeFactory {
 		PreXMLNode handler = new PreXMLNode("interrupt_handler_if");
 		
 		// conditions
-		handler.addChild(handleConds(text));
+		PreXMLNode conn = new PreXMLNode("conditions");
+		handleConds(conn, text.substring(text.indexOf("(")+1, text.lastIndexOf(")")));
+		handler.addChild(conn);
+		
+		return handler;
+	}
+	
+	// #interrupt_if(conditions){... actions }		=> <handler><conditions></conditions><actions></actions></handler>
+	private static PreXMLNode toPreXMLNode_interrupt_if(String text, List<String> valuelist) {
+		//System.out.println("toPreXMLNode #interrupt if");
+		
+		// #interrupt_if(check_any(event_object_attacked(group="$localtargetgroup") && event_object_signalled(check="false", object="this.sector", param="'police'")) && set_value(exact="if (event.name == 'event_object_attacked') then event.param else event.param2", name="$attacker") && $police && this.sector.exists && $attacker.isoperational && $attacker.zone.policefaction && not this.hasrelation.enemy.{$attacker.zone.policefaction} && $attacker.owner != this.owner && $attacker.owner != event.param3.owner){
+		
+		PreXMLNode handler = new PreXMLNode("interrupt_if");
+		PreXMLNode cond = new PreXMLNode("conditions");
+		
+		// conditions
+		
+		handleConds(cond, text.substring(text.indexOf("(")+1, text.lastIndexOf(")")));
+		handler.addChild(cond);
 		
 		return handler;
 	}
 	
 	// a && b(c && d)	=> <conditions><a /><b><c /><d /></b></conditions> 
-	private static PreXMLNode handleConds(String text) {
-		String conds = text.substring(22, text.lastIndexOf(")"));
+	private static void handleConds_defunct(PreXMLNode parent, String text) {
+		String conds = text.substring(text.indexOf("(")+1, text.lastIndexOf(")"));
+		
+		
+		System.out.println("CONDS_TEXT: "+text);
 		System.out.println("CONDS: "+conds);
 		
-		PreXMLNode conn = new PreXMLNode("conditions");
+		//PreXMLNode conn = new PreXMLNode("conditions");
 		
 		if(conds.contains("&")) {
 			conds = conds.replaceAll("&&", "&");
@@ -308,31 +334,29 @@ public class PreXMLNodeFactory {
 							String act = x.substring(x.indexOf('(')+1, x.lastIndexOf(')'));
 							
 							for(String a : act.split("&")) {
-								PreXMLNode n = condToNode(a);
+								PreXMLNode n = condToNode_defunct(a);
 								if(n != null)
 									condx.addChild(n);
 							}
 							
-							conn.addChild(condx);
+							parent.addChild(condx);
 						}else {
-							PreXMLNode n = condToNode(x);
+							PreXMLNode n = condToNode_defunct(x);
 							if(n != null)
-								conn.addChild(n);
+								parent.addChild(n);
 						}
 					}
 				}
 			}
 		}else {
-			PreXMLNode n = condToNode(conds);
+			PreXMLNode n = condToNode_defunct(conds);
 			if(n != null)
-				conn.addChild(n);
+				parent.addChild(n);
 		}
-		
-		return conn;
 	}
 	
 	// identify PreXMLNodes from conditions string  a && b && c(d && d)
-	private static PreXMLNode condToNode(String text) {
+	private static PreXMLNode condToNode_defunct(String text) {
 		
 		PreXMLNode condx2 = null;
 		String comment = "";
@@ -377,7 +401,7 @@ public class PreXMLNodeFactory {
 				}else if(cval2.contains("(")){
 					//String cname3 = cval2.substring(0,cval2.indexOf('('));
 					
-					condToNode(cval2);
+					condToNode_defunct(cval2);
 					//condx2.getChildren().add(condToNode(cval2));
 				}else {
 					PreXMLNode valn = new PreXMLNode("check_value");
@@ -410,14 +434,120 @@ public class PreXMLNodeFactory {
 		
 		return condx2;
 	}
+	
+	private static void handleConds(PreXMLNode parent, String text) {
+		String conds = text;
+		
+		text = text.replace("&&", "&");
+		System.out.println("CONDS2_TEXT: "+text);
+		
+		/*if(text.contains("(")){
+			conds = text.substring(text.indexOf("(")+1, text.lastIndexOf(")"));
+		}else conds = text;
+		
+		System.out.println("CONDS2: "+conds);
+		*/
+		
+		
+		
+		// loop through the characters and split up the conditions by parentheses
+		PreXMLNode condx2 = new PreXMLNode("");
+		
+		LinkedList<PreXMLNode> nodes = new LinkedList<PreXMLNode>(); 
+		
+		String pvalue="";
+		int bracket=0, commentn=-2;
+		for(char c : conds.toCharArray()) {
+			if(c == '(') bracket++;
+			else if(c== ')') bracket--;
+			
+			if(c== ')' && bracket <= 0) {
+				if(pvalue.length() > 0) {
+					System.out.println("handleConds -- '"+condx2.name+"' subvalue '"+pvalue+"'");
+					
+					
+					
+					if(condx2.name.trim().equals("set_value")) {
+						condx2.addAttrsFromParams(pvalue, ",");
+					}else if(pvalue.contains("&") || pvalue.contains("(")) {
+						handleConds(condx2,pvalue+")");
+					}else {
+						condx2.addAttrsFromParams(pvalue, ",");
+					}
+					
+					pvalue="";
+				}
+			}else if(c == '&' && bracket <= 0) {
+				condx2.name = condx2.name.trim();
+				System.out.println();
+				if(condx2.name.length() > 0) {
+					
+					System.out.println("handleConds -- '"+condx2.name+"'");
+					nodes.add(condx2);
+					condx2 = new PreXMLNode("");
+				}
+			}else if(bracket >= 1 && !(bracket == 1 && c=='(')) {
+				pvalue += c;
+			}else if(bracket == 1 && c=='(') {
+				// not here!
+			}else {
+				condx2.name += c; 
+				//System.out.print(c);
+			}
+		}
+		
+		condx2.name = condx2.name.trim();
+		if(condx2.name.length() > 0) {
+			System.out.println("handleConds -- '"+condx2.name+"'");
+			nodes.add(condx2);
+			condx2 = new PreXMLNode("");
+		}
+		
+		for(PreXMLNode node : nodes) {
+			String comment = "";
+			if(node.name.contains("/*")) {
+				String[] t = Utils.stripMLComment(node.name);
+				node.name = t[0];
+				comment = t[1];
+			}
+			
+			
+			
+			if(node.getChildren().size() == 0 && node.attributes.size() == 0) {
+				// either a function or a value
+				node.putAttrNode("value", node.name);
+				node.name="check_value";
+			}
+			
+			if(!comment.equals(""))
+				node.putAttrNode("comment", comment);
+			
+			//node.printnode(1);
+			parent.addChild(node);
+		}
+	}
+	
 
+	// #interrupt_handler_ref(REF);	=> <handler ref=REF />
+	private static PreXMLNode toPreXMLNode_interrupt_handler_ref(String text) {
+		PreXMLNode node;
+		//System.out.println("toPreXMLNode #interrupt ref");
+		String val = text.substring(text.indexOf("(")+1, text.lastIndexOf(")")).replace("\"", "");
+		
+		node = new PreXMLNode("handler");
+		node.putAttrNode("ref", val);
+		
+		//System.out.println("	toPreXMLNode ref="+val);
+		return node;
+	}
+	
 	// #interrupt_handler_ref(REF);	=> <handler ref=REF />
 	private static PreXMLNode toPreXMLNode_interrupt_ref(String text) {
 		PreXMLNode node;
 		//System.out.println("toPreXMLNode #interrupt ref");
 		String val = text.substring(text.indexOf("(")+1, text.lastIndexOf(")")).replace("\"", "");
 		
-		node = new PreXMLNode("handler");
+		node = new PreXMLNode("interrupt");
 		node.putAttrNode("ref", val);
 		
 		//System.out.println("	toPreXMLNode ref="+val);

@@ -30,7 +30,7 @@ import org.w3c.dom.Node;
 import org.xml.sax.SAXException;
 
 public class JS2XML {
-	private static boolean interrupts=false, paramsx=false, interruptsinner=false;
+	private static boolean interrupts=false, paramsx=false, interrupt_inline=false;
 	private static PreXMLNode intnode = null, paramnode = null; 
 	
 	
@@ -106,6 +106,7 @@ public class JS2XML {
 			String text = line, comment = "", params="";
 			
 			if(line.length() == 0) continue;
+			if(line.equals(";")) continue;
 			
 			System.out.println(Utils.toTab(bracket)+"process -- "+text);
 			try {
@@ -250,7 +251,7 @@ public class JS2XML {
 	
 	
 	private static void param_nodehandle_bracket(String text, PreXMLNode nodex, PreXMLNode parentnode) {
-		if(parentnode.name.equals("create_order")) {
+		if(parentnode.name.equals("create_order") || parentnode.name.equals("run_script")) {
 			parentnode.addChild(nodex);
 			return;
 		}
@@ -284,7 +285,7 @@ public class JS2XML {
 
 	
 	private static void param_nodehandle(String text, PreXMLNode nodex, PreXMLNode parentnode) {
-		if(parentnode.name.equals("create_order")) {
+		if(parentnode.name.equals("create_order") || parentnode.name.equals("run_script")) {
 			parentnode.addChild(nodex);
 			return;
 		}
@@ -320,22 +321,32 @@ public class JS2XML {
 			return;
 		}
 		
+		if(text.startsWith("#interrupt_if") || text.startsWith("#interrupt_ref")) 
+			interrupt_inline = true;
+		
 		if(text.startsWith("#interrupt")/* && !paramsx*/) {
 			if(interrupts) {
-				intnode.addChild(nodex);
+				if(!interrupt_inline) intnode.addChild(nodex);
+				else parentnode.addChild(nodex);
 				System.out.println("interrupts add " + nodex.name);
 			}else {
-				intnode = new PreXMLNode("interrupts");
-				intnode.addChild(nodex);
+				if(!interrupt_inline) {
+					intnode = new PreXMLNode("interrupts");
+					intnode.addChild(nodex);
+				}else parentnode.addChild(nodex);
+				
 				interrupts = true;
 				System.out.println("interrupts start " + nodex.name);
 			}
 		}else if(interrupts) {
 			if(!(parentnode.isInterruptAction(parentnode) || parentnode.name.startsWith("interrupt"))) {
-				parentnode.addChild(intnode);
+				if(!interrupt_inline)
+					parentnode.addChild(intnode);
 				parentnode.addChild(nodex);
+				
 				intnode=null;
 				interrupts = false;
+				interrupt_inline = false;
 				System.out.println("interrupts end " + nodex.name+"   PARENT: "+parentnode.name);
 			}else {
 				parentnode.addChild(nodex);
@@ -354,15 +365,24 @@ public class JS2XML {
 			return;
 		}
 		
+		if(text.startsWith("#interrupt_if") || text.startsWith("#interrupt_ref")) 
+			interrupt_inline = true;
 		
 		if(text.startsWith("#interrupt")/* && !paramsx*/) {
 			
 			if(interrupts) {
-				intnode.addChild(nodex);
+				if(interrupt_inline) parentnode.addChild(nodex);
+				else intnode.addChild(nodex);
 				System.out.println("interrupts { add " + text);
 			}else {
-				intnode = new PreXMLNode("interrupts");
-				intnode.addChild(nodex);
+				if(interrupt_inline) {
+					parentnode.addChild(nodex);
+				}else {
+					intnode = new PreXMLNode("interrupts");
+					intnode.addChild(nodex);
+				}
+				
+				
 				interrupts = true;
 				System.out.println("interrupts { start " + text);
 			}
@@ -371,9 +391,11 @@ public class JS2XML {
 				parentnode.addChild(nodex);
 				System.out.println("interrupts { ISINTERRUPT add  " + text);
 			}else {
-				parentnode.addChild(intnode);
+				if(interrupt_inline) parentnode.addChild(nodex);
+				else parentnode.addChild(intnode);
 				intnode=null;
 				interrupts = false;
+				interrupt_inline = false;
 				System.out.println("interrupts { end " + text);
 			}
 		}else if(!paramsx && !text.startsWith("param ")) { // prevent dual-copy
@@ -386,9 +408,11 @@ public class JS2XML {
 	
 
 	private static String preprocess(String injs) {
-		injs = injs.replaceAll("    ", "");
-		injs = injs.replaceAll("\n}", "\n}\n"); // prevent combining endbracket
+		injs = injs.replaceAll("^[ ]+", ""); // replace all leading spaces
+		injs = injs.replaceAll("\\*\\/([^\n])", "*/\n$1"); // multi-line comment bleeding into same line, split it up
+		injs = injs.replaceAll("\n}", "\n}\n"); // prevent combining endbrackets
 		injs = injs.replaceAll("\t", "");
+		injs = injs.replaceAll("^[ ]+", ""); // replace all leading spaces
 		
 		injs = preprocess_combineparams(injs);
 		
@@ -406,6 +430,7 @@ public class JS2XML {
 		List<String> newlines = new LinkedList<String>();
 		
 		String currentline="";
+		boolean inparam = false;
 		int par=0;
 		for(String line : lines) {
 			// count parentheses, if the number of parentheses matches, then move on.

@@ -51,8 +51,9 @@ public class EditorGui {
 	 * Launch the application.
 	 */
 	public static void main(String[] args) {
-		
-		/*XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/cat/aiscripts/order.move.recon.xml");
+		/*
+		//XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/cat/aiscripts/order.move.recon.xml");
+		XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/cat/aiscripts/masstraffic.watchdog.xml");
 		//XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/cat/aiscripts/boarding.pod.return.xml");
 		//XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/testin.xml");
 		String js = x2js.getJS();
@@ -73,8 +74,8 @@ public class EditorGui {
 	 		BufferedWriter writer = new BufferedWriter(new FileWriter(new File(saveloc)));
 	 	    writer.write(xml);
 	 	    writer.close();
- 		}catch(Exception e) {}*/
-		
+ 		}catch(Exception e) {}
+		*/
 		
 		
 		EventQueue.invokeLater(new Runnable() {

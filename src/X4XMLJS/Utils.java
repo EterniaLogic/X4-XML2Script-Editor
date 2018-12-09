@@ -43,23 +43,32 @@ public class Utils {
 	}
 
 	// Print attributes with a space between from XML node
-	public static String handleComment(String com, int tabs) {
-		if(com.contains("\n")) {
+	public static String handleComment(String com, int tabs, boolean forceml) {
+		if(com.contains("\n") || forceml) {
 			String[] lines = com.split("\n");
-			String text=Utils.toTab(tabs)+"/* "+lines[0]+"\n";
+			String text="";
+			if(!forceml) text += Utils.toTab(tabs)+"/* "+lines[0].trim()+"\n";
+			else text += "/* "+lines[0].trim();
 			
 			for(int i=1;i<lines.length;i++) {
-				text += Utils.toTab(tabs+1)+lines[i]+"\n";
+				text += Utils.toTab(tabs+1)+lines[i].trim()+"\n";
 			}
 			
-			return text+Utils.toTab(tabs)+" */";
+			if(!forceml) return text+Utils.toTab(tabs)+" */";
+			else  return text+" */";
 		}else return Utils.toTab(tabs)+"// "+com+"";
 	}
 
 	// get {name=value, ...} for all attributes from XML node
 	// returns {name=value,   comment}
-	public static String[] strAttrs(Node node, boolean movecomment) {
+	public static String[] strAttrs(Node node, boolean movecomment, String[] filter) {
 		String t = "", comment="";
+		
+		// create a list for filters if used
+		List<String> filterlist = new LinkedList<String>();
+		if(filter != null && filter.length > 0)
+			for(String s : filter) 
+				filterlist.add(s);
 		
 		if(node == null) return new String[] {"",""};
 		if(node.getNodeName().equals("#text")) return new String[] {"",""};
@@ -70,6 +79,8 @@ public class Utils {
 		for(int i=0;i<m.getLength();i++) {
 			if(m.item(i).getNodeName().equals("comment") && movecomment) {
 				comment = m.item(i).getNodeValue();
+			}else if(filterlist.contains(m.item(i).getNodeName())) {
+				// value filtered out
 			}else nlist.add(m.item(i));
 		}
 		
@@ -82,13 +93,29 @@ public class Utils {
 		return new String[] {t, comment};
 	}
 	
+	public static String strAttrs_tocomment(Node node, boolean movecomment, String[] filter) {
+		String comment="";
+		
+		String[] s = Utils.strAttrs(node,movecomment,filter);
+		if(s[0].length() > 0 || s[1].length() > 0) {
+			comment = " // "+s[1];
+			if(s[0].length() > 0) comment += "{"+s[0]+"}";
+		}
+		
+		return comment;
+	}
+	
 	public static String[] stripMLComment(String text) {
 		String comment="";
 		
 		if(text.contains("/*") && text.contains("*/")) {
 			comment =  text.substring(text.indexOf("/*")+2, text.lastIndexOf("*/")-1).trim();
 			
-			text = text.substring(0, text.indexOf("/*")-1) + text.substring(text.lastIndexOf("*/")+2, text.length());
+			String a="",b="";
+			if(text.indexOf("/*")-1 > 0) a=text.substring(0, text.indexOf("/*")-1);
+			if((text.length()-(text.lastIndexOf("*/")+2)) > 0) b=text.substring(text.lastIndexOf("*/")+2, text.length());
+			
+			text = a + b;
 		}
 		
 		return new String[] {text, comment};
