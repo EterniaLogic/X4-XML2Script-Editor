@@ -116,7 +116,17 @@ public class XML2JS {
 				
 			// mdscripts
 			}else if(child.getNodeName().equals("cues")) { // md script cue
-				
+				/*<mdscript name="Boarding" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+  <cues>
+
+    <cue name="OperationCreated" instantiate="true" namespace="this" version="3">
+      <conditions>
+        <event_boarding_operation_created/>
+      </conditions>
+      <actions>
+
+*/				
+				text += processCues(child,1);
 			}else if(child.getNodeName().equals("library")) { // Libraries act kind of like functions that are referenced in the cues (via <include_actions ref="BoardShip__Standard_FindMilitaryTarget"/>)
 				
 			}else {}
@@ -124,6 +134,42 @@ public class XML2JS {
 		return text;
 	}
 	
+	private String processCues(Node child, int tabulation) {
+		String comment = Utils.strAttrs_tocomment(child,false,null);
+		String text = Utils.toTab(tabulation)+"cues{"+comment+"\n";
+		
+		// process children nodes
+		for(Node child2 : Utils.getChildren(child)) {
+			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation,false);
+			
+			if(child2.getNodeName().equals("cue")) {
+				text+=processCue(child2,tabulation+1);
+			}
+		}
+		text += Utils.toTab(tabulation)+"}\n";
+		
+		return text;
+	}
+	
+	private String processCue(Node child, int tabulation) {
+		String comment = Utils.strAttrs_tocomment(child,false,new String[] {"name"});
+		String text = Utils.toTab(tabulation)+"cue "+Utils.getAttrValue(child, "name")+"{"+comment+"\n";
+		
+		// process children nodes
+		for(Node child2 : Utils.getChildren(child)) {
+			if(child2.getNodeName().equals("#comment")) text += Utils.toTab(tabulation)+Utils.handleComment(child2.getNodeValue(),tabulation,false);
+			
+			if(child2.getNodeName().equals("conditions")) {
+				text += handleConds(child2,true);
+			}else if(child2.getNodeName().equals("actions")) {
+				text += handleActions(child2,tabulation+1);
+			}
+		}
+		
+		text += Utils.toTab(tabulation)+"}\n";
+		
+		return text;
+	}
 	
 	// Process <order > tag
 	private String processOrder(Node child, int tabulation) {
