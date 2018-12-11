@@ -1,82 +1,48 @@
-package X4XMLJS;
+package X2S_ScriptEditor.Gui;
 
-import java.awt.EventQueue;
-import java.awt.ScrollPane;
-
-import javax.swing.JFrame;
 import java.awt.BorderLayout;
-import javax.swing.JMenuBar;
-import javax.swing.JMenu;
-import javax.swing.JMenuItem;
-import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-import javax.swing.KeyStroke;
-import javax.swing.filechooser.FileFilter;
-import javax.swing.filechooser.FileNameExtensionFilter;
-
-import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
-import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
-
+import java.awt.Dimension;
+import java.awt.EventQueue;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.LinkedList;
-import java.util.List;
-import java.awt.event.InputEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.ActionEvent;
-import java.awt.Component;
-import java.awt.Dimension;
 
-import javax.swing.Box;
-import javax.swing.JEditorPane;
 import javax.swing.JFileChooser;
-import javax.swing.JTabbedPane;
-import javax.swing.JTextArea;
+import javax.swing.JFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
+import javax.swing.KeyStroke;
+import javax.swing.filechooser.FileNameExtensionFilter;
+
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+
+import X2S_ScriptEditor.Script.XML2JS;
+import X2S_ScriptEditor.XML.JS2XML;
 
 public class EditorGui {
 	final JFileChooser fc = new JFileChooser();
 	private JFrame frame;
 	private LinkedList<XML2JS> converters = new LinkedList<XML2JS>();
 	JTabbedPane tabbedPane;
+	DIFFGui diffgui = null;
 
 	/**
 	 * Launch the application.
 	 */
 	public static void main(String[] args) {
-		/*
-		//XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/cat/aiscripts/order.move.recon.xml");
-		XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/cat/aiscripts/masstraffic.watchdog.xml");
-		//XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/cat/aiscripts/boarding.pod.return.xml");
-		//XML2JS x2js = new XML2JS(System.getProperty("user.dir")+"/testin.xml");
-		String js = x2js.getJS();
-		
-		// save
-		try {
-		String saveloc = System.getProperty("user.dir")+"/test.xml.script";
-		BufferedWriter writer = new BufferedWriter(new FileWriter(new File(saveloc)));
-	    writer.write(js);
-	    writer.close();
-		}catch(Exception e) {}
-		
-		String xml = JS2XML.getXML(js);
-	    
-	 // save XML
- 		try {
-	 		String saveloc = System.getProperty("user.dir")+"/test.xml.test";
-	 		BufferedWriter writer = new BufferedWriter(new FileWriter(new File(saveloc)));
-	 	    writer.write(xml);
-	 	    writer.close();
- 		}catch(Exception e) {}
-		*/
-		
 		
 		EventQueue.invokeLater(new Runnable() {
 			public void run() {
@@ -102,6 +68,7 @@ public class EditorGui {
 	 */
 	private void initialize() {
 		frame = new JFrame();
+		frame.setTitle("X2S XML Script Editor");
 		frame.setBounds(100, 100, 653, 553);
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		frame.getContentPane().setLayout(new BorderLayout(0, 0));
@@ -151,6 +118,20 @@ public class EditorGui {
 		JMenuItem mntmClose = new JMenuItem("Close");
 		mnFile.add(mntmClose);
 		mnFile.add(mntmExit);
+		
+		JMenu mnTools = new JMenu("Tools");
+		menuBar.add(mnTools);
+		
+		JMenuItem mntmXmlDiffCreator = new JMenuItem("XML DIFF Creator");
+		mntmXmlDiffCreator.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent arg0) {
+				if(diffgui == null)
+					diffgui = new DIFFGui();
+				
+				diffgui.frame.show();
+			}
+		});
+		mnTools.add(mntmXmlDiffCreator);
 	}
 
 	private void openFile() {
@@ -178,7 +159,7 @@ public class EditorGui {
 		            splitPane.xml2js.saved=true;
 		            
 		            byte[] encoded = Files.readAllBytes(file.toPath());
-		            splitPane.JS.setText(new String(encoded, Charset.defaultCharset()));
+		            splitPane.EDITORLEFT.setText(new String(encoded, Charset.defaultCharset()));
 		            
 		            // .xml file exists?
 		            File f = new File(file.getPath().replaceAll(".xml.script", ".xml"));
@@ -226,14 +207,14 @@ public class EditorGui {
 					try {
 						f2.createNewFile();
 					    BufferedWriter writer = new BufferedWriter(new FileWriter(f2));
-					    writer.write(pane.JS.getText());
+					    writer.write(pane.EDITORLEFT.getText());
 					    writer.close();
 						System.out.println("Saved: " + file.getPath()+".script");
 					    
 						
 						// convert to XML
 						try {
-							String xml=JS2XML.getXML(pane.JS.getText());
+							String xml=JS2XML.getXML(pane.EDITORLEFT.getText());
 							
 							// verify XML
 							if(!JS2XML.verifyXML(xml)) {
@@ -259,55 +240,42 @@ public class EditorGui {
 }
 
 class JJsXmlSplitPane extends JSplitPane{
-	public RSyntaxTextArea XML;
-	public RSyntaxTextArea JS;
+	public RSyntaxTextArea EDITORRIGHT;
+	public RSyntaxTextArea EDITORLEFT;
 	public XML2JS xml2js;
 	
 	public JJsXmlSplitPane(File file) throws IOException {
 		super();
-		//List<String> lines = Files.readAllLines(file.toPath());
-    	
-		JScrollPane scroller = new JScrollPane();
-        JScrollPane scroller_xml = new JScrollPane();
-        XML = new RSyntaxTextArea(20, 60);
-        XML.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_XML);
-        XML.setCodeFoldingEnabled(true);
-        XML.setAntiAliasingEnabled(true);
-        
-        JS = new RSyntaxTextArea(20, 60);
-        JS.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JAVASCRIPT);
-        JS.setCodeFoldingEnabled(true);
-        JS.setAntiAliasingEnabled(true);
-        
-        scroller.setViewportView(JS);
-        scroller.setMinimumSize(new Dimension(400,100));
-        scroller_xml.setViewportView(XML);
-        
-        setLeftComponent(scroller);
-        setRightComponent(scroller_xml);
+		initialize();
         
         byte[] encoded = Files.readAllBytes(file.toPath());
-	    XML.setText(new String(encoded, Charset.defaultCharset()));
+	    EDITORRIGHT.setText(new String(encoded, Charset.defaultCharset()));
     	xml2js = new XML2JS(file.getPath());
-    	JS.setText(xml2js.getJS());
+    	EDITORLEFT.setText(xml2js.getJS());
 	}
 	
 	public JJsXmlSplitPane() {
+		super();
+		
+		initialize();
+	}
+	
+	void initialize() {
 		JScrollPane scroller = new JScrollPane();
         JScrollPane scroller_xml = new JScrollPane();
-        XML = new RSyntaxTextArea(20, 60);
-        XML.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_XML);
-        XML.setCodeFoldingEnabled(true);
-        XML.setAntiAliasingEnabled(true);
+        EDITORRIGHT = new RSyntaxTextArea(20, 60);
+        EDITORRIGHT.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_XML);
+        EDITORRIGHT.setCodeFoldingEnabled(true);
+        EDITORRIGHT.setAntiAliasingEnabled(true);
         
-        JS = new RSyntaxTextArea(20, 60);
-        JS.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JAVASCRIPT);
-        JS.setCodeFoldingEnabled(true);
-        JS.setAntiAliasingEnabled(true);
+        EDITORLEFT = new RSyntaxTextArea(20, 60);
+        EDITORLEFT.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JAVASCRIPT);
+        EDITORLEFT.setCodeFoldingEnabled(true);
+        EDITORLEFT.setAntiAliasingEnabled(true);
         
-        scroller.setViewportView(JS);
+        scroller.setViewportView(EDITORLEFT);
         scroller.setMinimumSize(new Dimension(400,100));
-        scroller_xml.setViewportView(XML);
+        scroller_xml.setViewportView(EDITORRIGHT);
         
         setLeftComponent(scroller);
         setRightComponent(scroller_xml);

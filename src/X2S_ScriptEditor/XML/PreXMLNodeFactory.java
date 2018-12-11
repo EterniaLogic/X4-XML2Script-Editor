@@ -1,12 +1,14 @@
-package X4XMLJS;
+package X2S_ScriptEditor.XML;
 
 import java.util.LinkedList;
 import java.util.List;
 
+import X2S_ScriptEditor.Utils;
+
 public class PreXMLNodeFactory {
 
 	// convert a line of code and convert it to a PreXMLNode when converting to XML
-	static PreXMLNode toPreXMLNode(String text, String params) {
+	public static PreXMLNode toPreXMLNode(String text, String params) {
 		PreXMLNode node=null;
 		
 		//System.out.println("toPreXMLNode "+text+"|"+params);

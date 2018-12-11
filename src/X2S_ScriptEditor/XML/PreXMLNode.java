@@ -1,11 +1,13 @@
-package X4XMLJS;
+package X2S_ScriptEditor.XML;
 
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 
+import X2S_ScriptEditor.Utils;
+
 // SubNode class used when converting Script to XML
-class PreXMLNode{
+public class PreXMLNode{
 	public String name="", value="";
 	public HashMap<String,PreXMLNode> attributes = new HashMap<String,PreXMLNode>();
 	private List<PreXMLNode> children = new LinkedList<PreXMLNode>();

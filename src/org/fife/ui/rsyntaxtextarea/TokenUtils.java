@@ -1,7 +1,9 @@
 package org.fife.ui.rsyntaxtextarea;
 
+import java.awt.Color;
+import java.awt.Font;
+
 import javax.swing.text.TabExpander;
-import java.awt.*;
 
 
 /**

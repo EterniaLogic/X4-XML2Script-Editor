@@ -1,6 +1,6 @@
 package org.fife.ui.rsyntaxtextarea;
 
-import java.awt.*;
+import java.awt.Color;
 
 /**
  * Utility methods useful when generating HTML representations of RSTA content.

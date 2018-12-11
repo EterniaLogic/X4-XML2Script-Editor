@@ -1,4 +1,4 @@
-package X4XMLJS;
+package X2S_ScriptEditor;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -227,7 +227,7 @@ public class Utils {
 	}
 
 	// returns text, params, comment
-	static String[] stripTextParamsComment(String text) {
+	public static String[] stripTextParamsComment(String text) {
 		String newtext=text.trim();
 		String params="";
 		String comment="";

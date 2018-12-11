@@ -10,7 +10,10 @@ package org.fife.ui.rsyntaxtextarea.modes;
 
 import javax.swing.text.Segment;
 
-import org.fife.ui.rsyntaxtextarea.*;
+import org.fife.ui.rsyntaxtextarea.AbstractTokenMaker;
+import org.fife.ui.rsyntaxtextarea.RSyntaxUtilities;
+import org.fife.ui.rsyntaxtextarea.Token;
+import org.fife.ui.rsyntaxtextarea.TokenMap;
 
 
 /**

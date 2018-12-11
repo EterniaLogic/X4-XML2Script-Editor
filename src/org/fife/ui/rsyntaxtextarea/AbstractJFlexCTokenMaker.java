@@ -12,6 +12,7 @@ package org.fife.ui.rsyntaxtextarea;
 import java.awt.event.ActionEvent;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
 import javax.swing.Action;
 import javax.swing.UIManager;
 import javax.swing.text.BadLocationException;

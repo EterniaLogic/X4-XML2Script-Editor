@@ -12,6 +12,7 @@ package org.fife.ui.rsyntaxtextarea;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Point;
+
 import javax.swing.Icon;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;

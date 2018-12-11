@@ -10,6 +10,7 @@ package org.fife.ui.rsyntaxtextarea.templates;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
+
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Caret;
 import javax.swing.text.Element;
