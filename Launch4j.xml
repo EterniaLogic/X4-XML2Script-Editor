@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch4jConfig>
+  <dontWrapJar>false</dontWrapJar>
+  <headerType>gui</headerType>
+  <jar>C:\Users\brcla\OneDrive\Documents\GitHub\X4-XML2Script-Editor\X4_Xml2Script_Editor.jar</jar>
+  <outfile>C:\Users\brcla\OneDrive\Documents\GitHub\X4-XML2Script-Editor\X4 Xml2SE.exe</outfile>
+  <errTitle></errTitle>
+  <cmdLine></cmdLine>
+  <chdir>.</chdir>
+  <priority>normal</priority>
+  <downloadUrl></downloadUrl>
+  <supportUrl></supportUrl>
+  <stayAlive>false</stayAlive>
+  <restartOnCrash>false</restartOnCrash>
+  <manifest></manifest>
+  <icon>C:\Users\brcla\OneDrive\Documents\x4-logo_200px.ico</icon>
+  <classPath>
+    <mainClass>X2S_ScriptEditor.Gui.EditorGui</mainClass>
+  </classPath>
+  <jre>
+    <path>%JAVA_HOME%;%PATH%</path>
+    <requiresJdk>false</requiresJdk>
+    <requires64Bit>false</requires64Bit>
+    <minVersion>1.8</minVersion>
+    <maxVersion></maxVersion>
+  </jre>
+</launch4jConfig>
