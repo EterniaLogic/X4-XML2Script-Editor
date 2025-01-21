@@ -2,10 +2,11 @@ package X2S_ScriptEditor;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.LinkedList;
 import java.util.List;
 
-import javax.xml.bind.DatatypeConverter;
+//import javax.xml.bind.DatatypeConverter;
 
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
@@ -19,7 +20,9 @@ public class Utils {
 			md = MessageDigest.getInstance("MD5");
 			md.update(ins.getBytes());
 		    byte[] digest = md.digest();
-		    return DatatypeConverter.printHexBinary(digest).toLowerCase();
+		    //.digest. DatatypeConverter.printHexBinary(digest).toLowerCase();
+		    HexFormat hexFormat = HexFormat.of();
+	        return hexFormat.formatHex(digest);
 		} catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
 		}

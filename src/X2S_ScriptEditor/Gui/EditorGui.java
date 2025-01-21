@@ -3,10 +3,12 @@ package X2S_ScriptEditor.Gui;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.EventQueue;
+import java.awt.Point;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
@@ -25,6 +27,7 @@ import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.KeyStroke;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.text.DefaultCaret;
 
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
@@ -242,16 +245,25 @@ public class EditorGui {
 class JJsXmlSplitPane extends JSplitPane{
 	public RSyntaxTextArea EDITORRIGHT;
 	public RSyntaxTextArea EDITORLEFT;
+	public JScrollPane SCROLLLEFT, SCROLLRIGHT;
 	public XML2JS xml2js;
+	public JS2XML js2xml;
 	
 	public JJsXmlSplitPane(File file) throws IOException {
 		super();
 		initialize();
         
-        byte[] encoded = Files.readAllBytes(file.toPath());
-	    EDITORRIGHT.setText(new String(encoded, Charset.defaultCharset()));
-    	xml2js = new XML2JS(file.getPath());
-    	EDITORLEFT.setText(xml2js.getJS());
+		
+		// determine panes based on file name?
+		
+        //byte[] encoded = Files.readAllBytes(file.toPath());
+        xml2js = new XML2JS(file.getPath());
+    	js2xml = new JS2XML();
+    	String js = xml2js.getJS();
+    	
+    	setLeft(js);
+    	setRight(js2xml.getXML(js));
+    	
 	}
 	
 	public JJsXmlSplitPane() {
@@ -260,24 +272,84 @@ class JJsXmlSplitPane extends JSplitPane{
 		initialize();
 	}
 	
+	public void setLeft(String jstext) {
+		Point v = SCROLLLEFT.getLocation();
+		int x = v.x;
+		int y = v.y;
+		EDITORLEFT.setText(jstext);
+		SCROLLLEFT.setLocation(x, y);
+	}
+	
+	public void setRight(String xmltext) {
+		Point v = SCROLLRIGHT.getLocation();
+		int x = v.x;
+		int y = v.y;
+		EDITORRIGHT.setText(xmltext);
+		SCROLLRIGHT.setLocation(x, y);
+	}
+	
 	void initialize() {
-		JScrollPane scroller = new JScrollPane();
-        JScrollPane scroller_xml = new JScrollPane();
+		SCROLLLEFT = new JScrollPane();
+        SCROLLRIGHT = new JScrollPane();
+        EDITORLEFT = new RSyntaxTextArea(20, 60);
         EDITORRIGHT = new RSyntaxTextArea(20, 60);
+        
+        
         EDITORRIGHT.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_XML);
         EDITORRIGHT.setCodeFoldingEnabled(true);
         EDITORRIGHT.setAntiAliasingEnabled(true);
+        EDITORRIGHT.addKeyListener(new JJsXmlLeftPaneKeyListener(this, false));
         
-        EDITORLEFT = new RSyntaxTextArea(20, 60);
         EDITORLEFT.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JAVASCRIPT);
         EDITORLEFT.setCodeFoldingEnabled(true);
         EDITORLEFT.setAntiAliasingEnabled(true);
+        EDITORLEFT.addKeyListener(new JJsXmlLeftPaneKeyListener(this, true));
         
-        scroller.setViewportView(EDITORLEFT);
-        scroller.setMinimumSize(new Dimension(400,100));
-        scroller_xml.setViewportView(EDITORRIGHT);
+        SCROLLLEFT.setViewportView(EDITORLEFT);
+        SCROLLLEFT.setMinimumSize(new Dimension(400,100));
+        SCROLLRIGHT.setViewportView(EDITORRIGHT);
         
-        setLeftComponent(scroller);
-        setRightComponent(scroller_xml);
+        setLeftComponent(SCROLLLEFT);
+        setRightComponent(SCROLLRIGHT);
 	}
 }
+
+class JJsXmlLeftPaneKeyListener implements KeyListener{
+	private JJsXmlSplitPane splitpane;
+	private boolean isLeft=false;
+	public JJsXmlLeftPaneKeyListener(JJsXmlSplitPane _splitpane, boolean _isLeft) {
+		splitpane = _splitpane;
+		isLeft=_isLeft;
+	}
+	
+	@Override
+	public void keyTyped(KeyEvent e) {
+		// TODO Auto-generated method stub
+		// update right pane with changes on left pane
+		
+		if(isLeft) {
+			// left side changed
+			System.out.println("left side changed");
+			
+			splitpane.setRight(splitpane.js2xml.getXML(splitpane.EDITORLEFT.getText()));
+			
+		}else {
+			// right side changed
+			System.out.println("right side changed");
+			
+			splitpane.setLeft(splitpane.xml2js.getJS(splitpane.EDITORRIGHT.getText()));
+		}
+	}
+
+	@Override
+	public void keyPressed(KeyEvent e) {
+		// do nothing
+	}
+
+	@Override
+	public void keyReleased(KeyEvent e) {
+		// do nothing
+	}
+	
+}
+

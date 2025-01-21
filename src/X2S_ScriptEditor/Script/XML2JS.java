@@ -1,5 +1,6 @@
 package X2S_ScriptEditor.Script;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.util.List;
 
@@ -24,6 +25,55 @@ public class XML2JS {
 		floc = ""; // no reference XML file
 	}
 	
+	private String ConvertToJS(Document document) {
+		String text = "";
+		document.getDocumentElement().normalize();
+		//System.out.println("Root element :" + doc.getDocumentElement().getNodeName()+"\n\n");
+		
+		org.w3c.dom.Element root = document.getDocumentElement();
+		
+		
+		
+		
+		// loop through parameters for root
+		String[] v = Utils.strAttrs(root,true,new String[] {"name"});
+		text += root.getNodeName()+" "+Utils.getAttrValue(root,"name")+"{ // "+v[1]+"{"+v[0]+"}";
+		
+		text += "\n";
+		
+		text += processInnerJS(root);
+		
+		// REGEX: prevent endbrackets on the same line
+		//text = text.replaceAll("$}}", "}\n}");
+		text = text.replaceAll("}([ ]+})", "}\n$1");// prevent }      }
+		text = text.replaceAll("}([ ]+else)", "}\n$1"); // prevent }     else{
+		text = text.replaceAll("}\n[ ]+(else)", "}$1");
+		text = text.replaceAll("}([ ]+[^e].*)", "}\n$1");
+		
+		for(int i=0;i<20;i++) // remove excessive spaces within statements
+			text = text.replaceAll("(\n\\s{2,})(([^ \n]+ )+)(\\s{4,})", "$1$2");
+		
+		text += "\n}";
+		return text;
+	}
+	
+	public String getJS(String XML) {
+		String text = "";
+		try {
+			ByteArrayInputStream xmlinstream = new ByteArrayInputStream(XML.getBytes());
+			
+			DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
+			DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+			Document doc = dBuilder.parse(xmlinstream);
+			
+			text += ConvertToJS(doc);
+		}catch(Exception e) {
+			e.printStackTrace();
+			
+		}
+		return text;
+	}
+	
 	public String getJS() {
 		String text="";
 		
@@ -36,33 +86,7 @@ public class XML2JS {
 			DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
 			Document doc = dBuilder.parse(new File(floc));
 			
-			doc.getDocumentElement().normalize();
-			//System.out.println("Root element :" + doc.getDocumentElement().getNodeName()+"\n\n");
-			
-			org.w3c.dom.Element root = doc.getDocumentElement();
-			
-			
-			
-			
-			// loop through parameters for root
-			String[] v = Utils.strAttrs(root,true,new String[] {"name"});
-			text += root.getNodeName()+" "+Utils.getAttrValue(root,"name")+"{ // "+v[1]+"{"+v[0]+"}";
-			
-			text += "\n";
-			
-			text += processInnerJS(root);
-			
-			// REGEX: prevent endbrackets on the same line
-			//text = text.replaceAll("$}}", "}\n}");
-			text = text.replaceAll("}([ ]+})", "}\n$1");// prevent }      }
-			text = text.replaceAll("}([ ]+else)", "}\n$1"); // prevent }     else{
-			text = text.replaceAll("}\n[ ]+(else)", "}$1");
-			text = text.replaceAll("}([ ]+[^e].*)", "}\n$1");
-			
-			for(int i=0;i<20;i++) // remove excessive spaces within statements
-				text = text.replaceAll("(\n\\s{2,})(([^ \n]+ )+)(\\s{4,})", "$1$2");
-			
-			text += "\n}";
+			text += ConvertToJS(doc);
 			
 		}catch(Exception e) {
 			e.printStackTrace();
